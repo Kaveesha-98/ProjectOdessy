@@ -7,3 +7,5 @@
 *.bloop
 */project/
 */target/
+project/
+target/
