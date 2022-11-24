@@ -39,13 +39,12 @@ class DECODE_ISSUE_UNIT extends Module{
     val writeBackResult = Input(new WriteBackResult)
     val unitStatus      = Output(new UnitStatus)
     val pipeLineStalled = Input(UInt(1.W))
-    val out             = Output(UInt(64.W))
   })
 
   io.unitStatus.stalled    := WireDefault(0.U(1.W))
   io.unitStatus.empty      := WireDefault(0.U(1.W))
 
-  val validReg = RegInit(0.U(1.W))
+  val validReg = WireDefault(0.U(1.W))
   val pcReg    = RegInit(0.U(64.W))
   val insReg   = RegInit(0.U(32.W))
   val immReg   = RegInit(0.U(64.W))
@@ -53,6 +52,9 @@ class DECODE_ISSUE_UNIT extends Module{
   val rs2Reg   = RegInit(0.U(64.W))
 
   val insType = WireDefault(0.U)
+  val rdValid = RegInit(1.U)
+  val rs1Valid = RegInit(1.U)
+  val rs2Valid = RegInit(1.U)
 
   pcReg  := io.fetchIssuePort.PC
   insReg := io.fetchIssuePort.instruction
@@ -65,6 +67,7 @@ class DECODE_ISSUE_UNIT extends Module{
   io.decodeIssuePort.rs2         := rs2Reg
 
   val ins = io.fetchIssuePort.instruction
+  val stalled = io.unitStatus.stalled
 
   switch (ins(6,0)) {
     is (lui.U)    { insType := utype.U }
@@ -93,14 +96,11 @@ class DECODE_ISSUE_UNIT extends Module{
     is (rtype.U) { immReg := Fill(64, 0.U) }
   }
 
-  val validBit = RegInit(VecInit(Seq.fill(32)(0.U(1.W))))
+  val validBit = RegInit(VecInit(Seq.fill(32)(1.U(1.W))))
   validBit(0) := 1.U
-  validBit(2) := 1.U
-  validBit(5) := 1.U
 
   val registerFile = Reg(Vec(32, UInt(64.W)))
   registerFile(0) := 0.U
-  registerFile(1) := 125.U
 
   when(io.writeBackResult.toRegisterFile === 1.U & validBit(io.writeBackResult.rd) === 0.U & io.writeBackResult.rd =/= 0.U) {
     registerFile(io.writeBackResult.rd) := io.writeBackResult.rdData
@@ -110,27 +110,36 @@ class DECODE_ISSUE_UNIT extends Module{
   rs1Reg := registerFile(ins(19, 15))
   rs2Reg := registerFile(ins(24, 20))
 
-  when(io.fetchIssuePort.valid === 1.U & (insType === rtype.U | insType === utype.U | insType === itype.U | insType === jtype.U)) {
-    when(validBit(ins(11, 7)) === 0.U) {
-      io.unitStatus.stalled := 1.U
-    } otherwise {
-      validBit(ins(11, 7)) := 0.U
-      io.unitStatus.stalled := 0.U
+  when(io.fetchIssuePort.valid === 1.U & io.pipeLineStalled =/= 1.U) {
+    when(insType === rtype.U | insType === utype.U | insType === itype.U | insType === jtype.U) {
+//      when(validBit(ins(11, 7)) === 0.U) { rdValid := 0.U }
+//      .otherwise {
+        validBit(ins(11, 7)) := 0.U
+//        rdValid := 1.U
+//      }
+    }
+    when(insType === rtype.U | insType === itype.U | insType === stype.U | insType === btype.U) {
+      when(validBit(ins(19, 15)) === 0.U) { rs1Valid := 0.U }
+      .otherwise( rs1Valid := 1.U )
+    }
+    when(insType === rtype.U | insType === stype.U | insType === btype.U) {
+      when(validBit(ins(24, 20)) === 0.U) { rs2Valid := 0.U }
+      .otherwise( rs2Valid:= 1.U )
     }
   }
+
+  stalled := ~(/*rdValid & */rs1Valid & rs2Valid)
 
   when(io.fetchIssuePort.valid === 0.U) { io.unitStatus.empty := 1.U }
   .otherwise { io.unitStatus.empty := 0.U }
 
   when(io.fetchIssuePort.valid === 0.U) { validReg := 0.U}
   .otherwise {
-    when(io.pipeLineStalled === 0.U & io.unitStatus.stalled === 0.U) { validReg := 1.U }
-    when(io.pipeLineStalled === 0.U & io.unitStatus.stalled === 1.U) { validReg := 0.U }
-    when(io.pipeLineStalled === 1.U & io.unitStatus.stalled === 0.U) { validReg := 1.U }
-    when(io.pipeLineStalled === 1.U & io.unitStatus.stalled === 1.U) { validReg := 0.U }
+    when(io.pipeLineStalled === 0.U & stalled === 0.U) { validReg := 1.U }
+    when(io.pipeLineStalled === 0.U & stalled === 1.U) { validReg := 0.U }
+    when(io.pipeLineStalled === 1.U & stalled === 0.U) { validReg := 1.U }
+    when(io.pipeLineStalled === 1.U & stalled === 1.U) { validReg := 0.U }
   }
-
-  io.out := registerFile(1)
 }
 
 object DECODE_ISSUE_UNIT extends App{
