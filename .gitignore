@@ -7,5 +7,6 @@
 *.bloop
 */project/
 */target/
+*/test_run_dir/
 project/
 target/
