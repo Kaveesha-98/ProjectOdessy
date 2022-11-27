@@ -1,7 +1,5 @@
 /*
- * This code is a minimal hardware described in Chisel.
- *
- * Blinking LED: the FPGA version of Hello World
+ Fetch Unit for in-order without speculation
  */
 
 import chisel3._
@@ -22,7 +20,7 @@ class branch_detector extends Module {
 
 }
 
-class FetchUnit extends Module {
+class FetchUnit(val pc_reset_val: Int, val fifo_size: Int) extends Module {
   val io = IO(new Bundle {
 
     //reqport signals
@@ -49,7 +47,7 @@ class FetchUnit extends Module {
 
   })
   //register defs
-  val PC = RegInit(0.U(64.W))
+  val PC = RegInit(pc_reset_val.U(64.W))
   val IR = RegInit(0.U(32.W))
   val internal_stall = RegInit(0.U(1.W))
   val IR_valid = RegInit(0.U(1.W))
@@ -58,7 +56,7 @@ class FetchUnit extends Module {
 
   // initialize branch detector and fifo buffer
   val branch_detector  = Module(new branch_detector)
-  val PC_fifo  = Module(new RegFifo(UInt(64.W), 256))
+  val PC_fifo  = Module(new RegFifo(UInt(64.W), fifo_size))
 
   //connect PC_fifo
   PC_fifo.io.enq.bits := PC
@@ -106,12 +104,12 @@ class FetchUnit extends Module {
   } .elsewhen (PC_fifo.io.deq.valid === 0.U & PC_valid === 1.U){
     internal_stall := 0.U
   }
-  printf(p"$io , ${PC_fifo.io.deq.valid}, ${PC_fifo.io.deq.ready}\n")
+  printf(p"$io\n")
 }
 
 /**
  * An object extending App to generate the Verilog code.
  */
 object Verilog extends App {
-  (new chisel3.stage.ChiselStage).emitVerilog(new FetchUnit())
+  (new chisel3.stage.ChiselStage).emitVerilog(new FetchUnit(0,256))
 }
