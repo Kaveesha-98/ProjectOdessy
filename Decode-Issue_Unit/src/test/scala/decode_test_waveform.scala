@@ -41,19 +41,19 @@ class TestDecodeWaveform(dut: DECODE_ISSUE_UNIT) extends PeekPokeTester(dut) {
   poke(dut.io.writeBackResult.rd, 5)
   poke(dut.io.writeBackResult.rdData, 1250)
   poke(dut.io.writeBackResult.toRegisterFile, 0)
-  poke(dut.io.pipeLineStalled, 0)
+  poke(dut.io.pipeLineStalled, 1)
 
   step(1)
 
-//  poke(dut.io.fetchIssuePort.valid, 1)
-//  poke(dut.io.fetchIssuePort.PC, 5)
-//  poke(dut.io.fetchIssuePort.instruction, Integer.parseInt("3e820293", 16))
-//  poke(dut.io.writeBackResult.rd, 1)
-//  poke(dut.io.writeBackResult.rdData, 1000)
-//  poke(dut.io.writeBackResult.toRegisterFile, 0)
-//  poke(dut.io.pipeLineStalled, 0)
-//
-//  step(1)
+  poke(dut.io.fetchIssuePort.valid, 1)
+  poke(dut.io.fetchIssuePort.PC, 2)
+  poke(dut.io.fetchIssuePort.instruction, Integer.parseInt("7d008113", 16))
+  poke(dut.io.writeBackResult.rd, 5)
+  poke(dut.io.writeBackResult.rdData, 1250)
+  poke(dut.io.writeBackResult.toRegisterFile, 0)
+  poke(dut.io.pipeLineStalled, 0)
+
+  step(1)
 //
 //  poke(dut.io.fetchIssuePort.valid, 1)
 //  poke(dut.io.fetchIssuePort.PC, 6)
