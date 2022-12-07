@@ -15,6 +15,7 @@ class DecodeIssuePort extends Bundle {
   val valid       = UInt(1.W)
   val instruction = UInt(32.W)
   val PC          = UInt(64.W)
+  val opCode      = UInt(7.W)
   val rs1         = UInt(64.W)
   val rs2         = UInt(64.W)
   val immediate   = UInt(64.W)
@@ -40,33 +41,44 @@ class DECODE_ISSUE_UNIT extends Module{
     val pipeLineStalled = Input(UInt(1.W))
   })
 
-  val validReg = RegInit(0.U(1.W))
-  val pcReg    = RegInit(0.U(64.W))
-  val insReg   = RegInit(0.U(32.W))
-  val immReg   = RegInit(0.U(64.W))
-  val rs1Reg   = RegInit(0.U(64.W))
-  val rs2Reg   = RegInit(0.U(64.W))
+  val ins     = io.fetchIssuePort.instruction
+  val validIn = io.fetchIssuePort.valid
+  val pc      = io.fetchIssuePort.PC
+  
+  val writeEn   = io.writeBackResult.toRegisterFile
+  val writeData = io.writeBackResult.rdData
+  val writeRd   = Wire(UInt(1.W))
+  writeRd      := io.writeBackResult.rd
 
-  val insType = WireDefault(0.U)
-  val rdValid = WireDefault(1.U)
-  val rs1Valid = WireDefault(1.U)
-  val rs2Valid = WireDefault(1.U)
-  val stalled = WireDefault(0.U)
+  val pipeLineStalled = io.pipeLineStalled
 
-  pcReg  := io.fetchIssuePort.PC
-  insReg := io.fetchIssuePort.instruction
+  val validOutReg = RegInit(0.U(1.W))
+  val pcReg       = RegInit(0.U(64.W))
+  val insReg      = RegInit(0.U(32.W))
+  val opCodeReg   = RegInit(0.U(7.W))
+  val immReg      = RegInit(0.U(64.W))
+  val rs1Reg      = RegInit(0.U(64.W))
+  val rs2Reg      = RegInit(0.U(64.W))
+
+  val insType      = WireDefault(0.U(3.W))
+  val rdValid      = WireDefault(1.U(1.W))
+  val rs1Valid     = WireDefault(1.U(1.W))
+  val rs2Valid     = WireDefault(1.U(1.W))
+  val unitStalled  = WireDefault(0.U(1.W))
+
+  pcReg  := pc
+  insReg := ins
 
   io.decodeIssuePort.PC          := pcReg
   io.decodeIssuePort.instruction := insReg
+  io.decodeIssuePort.opCode      := opCodeReg
   io.decodeIssuePort.immediate   := immReg
-  io.decodeIssuePort.valid       := validReg
+  io.decodeIssuePort.valid       := validOutReg
   io.decodeIssuePort.rs1         := rs1Reg
   io.decodeIssuePort.rs2         := rs2Reg
 
-  io.unitStatus.stalled := stalled
-  io.unitStatus.empty := ~io.fetchIssuePort.valid
-
-  val ins = io.fetchIssuePort.instruction
+  io.unitStatus.stalled := unitStalled
+  io.unitStatus.empty   := 0.U
 
   switch (ins(6,0)) {
     is(lui.U)    { insType := utype.U }
@@ -104,9 +116,11 @@ class DECODE_ISSUE_UNIT extends Module{
   rs1Reg := registerFile(ins(19, 15))
   rs2Reg := registerFile(ins(24, 20))
 
-  when(io.writeBackResult.toRegisterFile === 1.U & validBit(io.writeBackResult.rd) === 0.U & io.writeBackResult.rd =/= 0.U) {
-    registerFile(io.writeBackResult.rd) := io.writeBackResult.rdData
-    validBit(io.writeBackResult.rd) := 1.U
+  opCodeReg := ins(6, 0)
+
+  when(writeEn === 1.U & validBit(writeRd) === 0.U & writeRd =/= 0.U) {
+    registerFile(writeRd) := writeData
+    validBit(writeRd)     := 1.U
   }
 
   when(insType === rtype.U | insType === itype.U | insType === stype.U | insType === btype.U) {
@@ -117,20 +131,20 @@ class DECODE_ISSUE_UNIT extends Module{
   }
 
   when(insType === rtype.U | insType === utype.U | insType === itype.U | insType === jtype.U) {
-    when(io.fetchIssuePort.valid === 1.U & io.pipeLineStalled =/= 1.U & rs1Valid === 1.U & rs2Valid === 1.U) {
+    when(validIn === 1.U & pipeLineStalled =/= 1.U & rs1Valid === 1.U & rs2Valid === 1.U) {
       when(validBit(ins(11, 7)) === 0.U) { rdValid := 0.U }
       .otherwise { validBit(ins(11, 7)) := 0.U }
     }
   }
 
-  stalled := ~(rdValid & rs1Valid & rs2Valid)
+  unitStalled := ~(rdValid & rs1Valid & rs2Valid)
 
-  when(io.fetchIssuePort.valid === 0.U) { validReg := 0.U}
+  when(validIn === 0.U) { validOutReg := 0.U}
   .otherwise {
-    when(io.pipeLineStalled === 0.U & stalled === 0.U) { validReg := 1.U }
-    when(io.pipeLineStalled === 0.U & stalled === 1.U) { validReg := 0.U }
-    when(io.pipeLineStalled === 1.U & stalled === 0.U) { validReg := 1.U }
-    when(io.pipeLineStalled === 1.U & stalled === 1.U) { validReg := 0.U }
+    when(pipeLineStalled === 0.U & unitStalled === 0.U) { validOutReg := 1.U }
+    when(pipeLineStalled === 0.U & unitStalled === 1.U) { validOutReg := 0.U }
+    when(pipeLineStalled === 1.U & unitStalled === 0.U) { validOutReg := 1.U }
+    when(pipeLineStalled === 1.U & unitStalled === 1.U) { validOutReg := 0.U }
   }
 }
 
