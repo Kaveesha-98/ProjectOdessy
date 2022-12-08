@@ -1,3 +1,5 @@
+package alu
+
 import chisel3._
 import chisel3.util._
 
@@ -54,6 +56,10 @@ class Alu extends Module{
   rs1Reg    :- io.decodeIssuePort.rs1
   rs2Reg    :- io.decodeIssuePort.rs2
   opCodeReg :- io.decodeIssuePort.opCode
+  funct3Reg :- io.decodeIssuePort.instruction(14,12)
+
+  
+
 
   switch (opCode) {
     is(lui.U)    { insType := utype.U }
