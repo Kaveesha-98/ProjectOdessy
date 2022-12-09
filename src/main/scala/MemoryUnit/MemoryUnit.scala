@@ -72,23 +72,65 @@ class MemoryUnit extends Module {
 
     val pass_through :: wait_mem_req :: wait_mem_resp :: wait_writeback :: Nil = Enum(4)
 
+    val state_reg = RegInit(pass_through)
 
+    //Output is driven by a register
+    val resultsBuffer = Reg(new MemoryIssuePort())
+    io.memoryIssuePort.bits := resultsBuffer
+
+    val memoryIssuePort_valid = RegInit(false.B)
+    io.memoryIssuePort.valid := memoryIssuePort_valid
+
+    val memReqBuffer = Reg(new Bundle(){
+        val opcode      = UInt(3.W)
+        val param       = UInt(3.W)
+        val size        = UInt(2.W)
+        val source      = UInt(1.W)
+        val address     = UInt(64.W)
+        val mask        = UInt(8.W)
+        val data        = UInt(64.W)
+        val valid       = UInt(1.W)
+    })
+    io.memPort.a.opcode := memReqBuffer.opcode
+    io.memPort.a.param := memReqBuffer.param
+    io.memPort.a.size := memReqBuffer.size
+    io.memPort.a.source := memReqBuffer.source
+    io.memPort.a.address := memReqBuffer.address
+    io.memPort.a.mask := memReqBuffer.mask
+    io.memPort.a.data := memReqBuffer.data
+    io.memPort.a.valid := memReqBuffer.valid
+
+    switch(state_reg){
+        is(pass_through){
+            when(io.memoryIssuePort.ready){
+                resultsBuffer.instruction := io.aluIssuePort.bits.instruction
+                resultsBuffer.nextInstPtr := io.aluIssuePort.bits.nextInstPtr
+                resultsBuffer.aluResult := io.aluIssuePort.bits.aluResult
+                memoryIssuePort_valid := io.aluIssuePort.valid
+                when(io.aluIssuePort.valid && BitPat("b0?00011") === io.aluIssuePort.bits.instruction(6,0)){
+                    state_reg := wait_mem_req
+                    memoryIssuePort_valid := false.B
+                    memReqBuffer := 1.U
+                }
+            }
+        }
+    }
 
     io.aluIssuePort.ready := true.B
 
-    io.memoryIssuePort.valid := false.B
+    /* io.memoryIssuePort.valid := false.B
     io.memoryIssuePort.bits.instruction := 0.U
     io.memoryIssuePort.bits.nextInstPtr := 0.U
-    io.memoryIssuePort.bits.aluResult := 0.U
+    io.memoryIssuePort.bits.aluResult := 0.U */
 
-    io.memPort.a.opcode      := 0.U
+    /* io.memPort.a.opcode      := 0.U
     io.memPort.a.param       := 0.U
     io.memPort.a.size        := 0.U
     io.memPort.a.source      := 0.U
     io.memPort.a.address     := 0.U
     io.memPort.a.mask        := 0.U
     io.memPort.a.data        := 0.U
-    io.memPort.a.valid       := false.B
+    io.memPort.a.valid       := false.B */
 
     io.memPort.d.ready := false.B
 }
