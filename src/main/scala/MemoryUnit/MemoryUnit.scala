@@ -26,47 +26,6 @@ class MemoryIssuePort extends Bundle {
     val aluResult = UInt(64.W)
 }
 
-abstract class tilelink
-case class uncached_lightweight extends tilelink
-
-object tilelinkLink {
-    abstract class tilelinkLinkChannel extends Bundle
-
-    class channel_a(
-        val z: Int = 2,
-        val o: Int = 1,
-        val a: Int = 64.
-        val w: Int = 8,
-    ) extends tilelinkLinkChannel{
-        val opcode      = UInt(3.W)
-        val param       = UInt(3.W)
-        val size        = UInt(z.W)
-        val source      = UInt(o.W)
-        val address     = UInt(a.W)
-        val mask        = UInt(w.W)
-        val data        = UInt((8*w).W)
-    }
-
-    class channel_d(
-        val z : Int = 2,
-        val o : Int = 1,
-        val i : Int = 1,
-        val w : Int = 8,
-    ) extends Bundle {
-        val opcode  = UInt(3.W)
-        val param   = UInt(2.W)
-        val size    = UInt(z.W)
-        val source  = UInt(o.W)
-        val sink    = UInt(i.W)
-        val data    = UInt((8*w).W)
-        val error   = UInt(1.W)
-    }
-
-    def getLink(
-        
-    )
-}
-
 class channel_a(
     val z : Int = 2,
     val o : Int = 1,
