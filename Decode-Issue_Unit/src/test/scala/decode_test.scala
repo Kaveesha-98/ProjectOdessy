@@ -13,7 +13,7 @@ class TestDecode(dut: DECODE_ISSUE_UNIT) extends PeekPokeTester(dut) {
   println("Step " + step + ", imm = " + peek(dut.io.decodeIssuePort.immediate))
   println("Step " + step + ", stall = " + peek(dut.io.unitStatus.stalled))
   println("Step " + step + ", empty = " + peek(dut.io.unitStatus.empty))
-  println("Step " + step + ", out = " + peek(dut.io.out))
+//  println("Step " + step + ", out = " + peek(dut.io.out))
   println("-------------------------------------------------------------")
 
   poke(dut.io.fetchIssuePort.valid, 1.U)
@@ -35,7 +35,7 @@ class TestDecode(dut: DECODE_ISSUE_UNIT) extends PeekPokeTester(dut) {
   println("Step " + step + ", imm = " + peek(dut.io.decodeIssuePort.immediate))
   println("Step " + step + ", stall = " + peek(dut.io.unitStatus.stalled))
   println("Step " + step + ", empty = " + peek(dut.io.unitStatus.empty))
-  println("Step " + step + ", out = " + peek(dut.io.out))
+//  println("Step " + step + ", out = " + peek(dut.io.out))
   println("-------------------------------------------------------------")
 
   poke(dut.io.fetchIssuePort.valid, 1.U)
