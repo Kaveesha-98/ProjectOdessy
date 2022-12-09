@@ -53,10 +53,10 @@ class Alu extends Module{
   pcReg     := io.decodeIssuePort.PC
   insReg    := io.decodeIssuePort.instruction
   immReg    := io.decodeIssuePort.imm
-  rs1Reg    :- io.decodeIssuePort.rs1
-  rs2Reg    :- io.decodeIssuePort.rs2
-  opCodeReg :- io.decodeIssuePort.opCode
-  funct3Reg :- io.decodeIssuePort.instruction(14,12)
+  rs1Reg    := io.decodeIssuePort.rs1
+  rs2Reg    := io.decodeIssuePort.rs2
+  opCodeReg := io.decodeIssuePort.opCode
+  funct3Reg := io.decodeIssuePort.instruction(14,12)
 
 
 val aluResultReg = RegInit(0.U(64.W))
@@ -96,34 +96,44 @@ io.branchResult.target := branchResultTargetReg
       branchResultTargetReg   := rs1Reg + immReg               
      }
     is(cjump.U)  { 
-      
+      //impelment conditional jump
      }
     is(load.U)   { 
-      
+      //implement LB,LW,LH,LBU,LHU
      }
     is(store.U)  { 
-      
+      //implement SB,SH,SW
      }
     is(iops.U)   { 
-      
+      //implement ADDI,SLTI,SLTIU,XORI,ORI,ANDI,SLLI,SRLI,SRAI
      }
-    is(iops32.U) { 
-      
+
+    // is(iops32.U) { 
+    //   //implement RV32M Standard Extension
+    //  }
+
+     is(rops.U)   { 
+      //implement ADD,SUB,SLL,SLT,SLTU,XOR,SRL,SRA,OR,AND
      }
-    is(rops.U)   { 
-      
-     }
-    is(rops32.U) { 
-      
-     }
-    is(system.U) { 
-      
-     }
-    is(fence.U)  { 
-      
-     }
-    is(amos.U)   { 
-      
+
+    // is(rops32.U) { 
+    //   //implement RV64M Standard Extension
+    //  }
+
+    // is(system.U) { 
+    //   //Implement RV32/RV64 Zicsr Standard Extension
+    //  }
+
+    // is(fence.U)  { 
+        //implement FENCE instruction
+    //  }
+
+    // is(amos.U)   { 
+    //   //implement RV32A Standard Extension
+    //  }
+
+    is(store.U)  { 
+      //implement SB,SH,SW
      }
   }
 
