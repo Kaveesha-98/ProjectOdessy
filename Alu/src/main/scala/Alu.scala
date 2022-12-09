@@ -53,10 +53,10 @@ class Alu extends Module{
   pcReg     := io.decodeIssuePort.PC
   insReg    := io.decodeIssuePort.instruction
   immReg    := io.decodeIssuePort.imm
-  rs1Reg    :- io.decodeIssuePort.rs1
-  rs2Reg    :- io.decodeIssuePort.rs2
-  opCodeReg :- io.decodeIssuePort.opCode
-  funct3Reg :- io.decodeIssuePort.instruction(14,12)
+  rs1Reg    := io.decodeIssuePort.rs1
+  rs2Reg    := io.decodeIssuePort.rs2
+  opCodeReg := io.decodeIssuePort.opCode
+  funct3Reg := io.decodeIssuePort.instruction(14,12)
 
 
 val aluResultReg = RegInit(0.U(64.W))
