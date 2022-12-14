@@ -27,58 +27,56 @@ class WriteBackResult extends Bundle {
   val rdData         = UInt(64.W)
 }
 
-class UnitStatus extends Bundle {
-  val stalled = UInt(1.W)
-  val empty   = UInt(1.W)
-}
-
 class DECODE_ISSUE_UNIT extends Module{
   val io = IO(new Bundle() {
     val fetchIssuePort  = Input(new FetchIssuePort)
     val decodeIssuePort = Output(new DecodeIssuePort)
     val writeBackResult = Input(new WriteBackResult)
-    val unitStatus      = Output(new UnitStatus)
-    val pipeLineStalled = Input(UInt(1.W))
+    val readyOut        = Output(UInt(1.W))
+    val readyIn         = Input(UInt(1.W))
   })
-
-  val ins     = io.fetchIssuePort.instruction
-  val validIn = io.fetchIssuePort.valid
-  val pc      = io.fetchIssuePort.PC
+  
+  val validIn   = io.fetchIssuePort.valid
+  val pc        = io.fetchIssuePort.PC
   
   val writeEn   = io.writeBackResult.toRegisterFile
   val writeData = io.writeBackResult.rdData
   val writeRd   = Wire(UInt(1.W))
   writeRd      := io.writeBackResult.rd
 
-  val pipeLineStalled = io.pipeLineStalled
+  val readyIn   = io.readyIn
+  
+  val pcReg     = RegInit(0.U(64.W))
+  val insReg    = RegInit(0.U(32.W))
+  val opCodeReg = RegInit(0.U(7.W))
+  val immReg    = RegInit(0.U(64.W))
+  val rs1Reg    = RegInit(0.U(64.W))
+  val rs2Reg    = RegInit(0.U(64.W))
 
-  val validOutReg = RegInit(0.U(1.W))
-  val pcReg       = RegInit(0.U(64.W))
-  val insReg      = RegInit(0.U(32.W))
-  val opCodeReg   = RegInit(0.U(7.W))
-  val immReg      = RegInit(0.U(64.W))
-  val rs1Reg      = RegInit(0.U(64.W))
-  val rs2Reg      = RegInit(0.U(64.W))
-
-  val insType      = WireDefault(0.U(3.W))
-  val rdValid      = WireDefault(1.U(1.W))
-  val rs1Valid     = WireDefault(1.U(1.W))
-  val rs2Valid     = WireDefault(1.U(1.W))
-  val unitStalled  = WireDefault(0.U(1.W))
+  val validOut  = WireDefault(0.U(1.W))
+  val readyOut  = WireDefault(0.U(1.W))
+  val insType   = WireDefault(0.U(3.W))
+  val rdValid   = WireDefault(1.U(1.W))
+  val rs1Valid  = WireDefault(1.U(1.W))
+  val rs2Valid  = WireDefault(1.U(1.W))
+  val stalled   = WireDefault(0.U(1.W))
+  val ins       = WireDefault(0.U(32.W))
 
   pcReg  := pc
-  insReg := ins
+  when(io.fetchIssuePort.valid === 1.U & io.readyOut === 1.U) {
+    insReg := io.fetchIssuePort.instruction
+  }
+
+  ins := Mux(io.fetchIssuePort.valid === 1.U & io.readyOut === 1.U, io.fetchIssuePort.instruction, insReg)
 
   io.decodeIssuePort.PC          := pcReg
   io.decodeIssuePort.instruction := insReg
   io.decodeIssuePort.opCode      := opCodeReg
   io.decodeIssuePort.immediate   := immReg
-  io.decodeIssuePort.valid       := validOutReg
+  io.decodeIssuePort.valid       := validOut
   io.decodeIssuePort.rs1         := rs1Reg
   io.decodeIssuePort.rs2         := rs2Reg
-
-  io.unitStatus.stalled := unitStalled
-  io.unitStatus.empty   := 0.U
+  io.readyOut                    := readyOut
 
   switch (ins(6,0)) {
     is(lui.U)    { insType := utype.U }
@@ -131,20 +129,44 @@ class DECODE_ISSUE_UNIT extends Module{
   }
 
   when(insType === rtype.U | insType === utype.U | insType === itype.U | insType === jtype.U) {
-    when(validIn === 1.U & pipeLineStalled =/= 1.U & rs1Valid === 1.U & rs2Valid === 1.U) {
+    when(rs1Valid === 1.U & rs2Valid === 1.U) {
       when(validBit(ins(11, 7)) === 0.U) { rdValid := 0.U }
       .otherwise { validBit(ins(11, 7)) := 0.U }
     }
   }
 
-  unitStalled := ~(rdValid & rs1Valid & rs2Valid)
+  stalled := ~(rdValid & rs1Valid & rs2Valid)
 
-  when(validIn === 0.U) { validOutReg := 0.U}
-  .otherwise {
-    when(pipeLineStalled === 0.U & unitStalled === 0.U) { validOutReg := 1.U }
-    when(pipeLineStalled === 0.U & unitStalled === 1.U) { validOutReg := 0.U }
-    when(pipeLineStalled === 1.U & unitStalled === 0.U) { validOutReg := 1.U }
-    when(pipeLineStalled === 1.U & unitStalled === 1.U) { validOutReg := 0.U }
+  val idleState :: passthroughState :: waitState :: stallState :: Nil = Enum(4)
+  val stateReg = RegInit(idleState)
+
+  switch(stateReg) {
+    is(idleState) {
+      validOut := 0.U
+      readyOut := 1.U
+      when(validIn === 1.U) {
+        stateReg := Mux(stalled === 1.U, stallState, Mux(readyIn === 1.U, passthroughState, waitState))
+      }
+    }
+    is(passthroughState) {
+      validOut := 1.U
+      readyOut := 1.U
+      stateReg := Mux(stalled === 1.U, stallState, Mux(readyIn === 0.U, waitState, Mux(validIn === 1.U, passthroughState, idleState)))
+    }
+    is(waitState) {
+      validOut := 1.U
+      readyOut := 0.U
+      when(readyIn === 1.U) {
+        stateReg := Mux(validIn === 1.U, passthroughState, idleState)
+      }
+    }
+    is(stallState) {
+      validOut := 0.U
+      readyOut := 0.U
+      when(stalled === 0.U) {
+        stateReg := Mux(readyIn === 1.U, passthroughState, waitState)
+      }
+    }
   }
 }
 
