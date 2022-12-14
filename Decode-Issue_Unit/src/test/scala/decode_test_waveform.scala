@@ -11,7 +11,7 @@ class TestDecodeWaveform(dut: DECODE_ISSUE_UNIT) extends PeekPokeTester(dut) {
   poke(dut.io.writeBackResult.rd, 25)
   poke(dut.io.writeBackResult.rdData, 1000)
   poke(dut.io.writeBackResult.toRegisterFile, 0)
-  poke(dut.io.pipeLineStalled, 0)
+  poke(dut.io.readyIn, 1)
 
   step(1)
 
@@ -21,37 +21,37 @@ class TestDecodeWaveform(dut: DECODE_ISSUE_UNIT) extends PeekPokeTester(dut) {
   poke(dut.io.writeBackResult.rd, 1)
   poke(dut.io.writeBackResult.rdData, 1500)
   poke(dut.io.writeBackResult.toRegisterFile, 0)
-  poke(dut.io.pipeLineStalled, 0)
+  poke(dut.io.readyIn, 1)
 
   step(1)
 
-  poke(dut.io.fetchIssuePort.valid, 1)
+  poke(dut.io.fetchIssuePort.valid, 0)
   poke(dut.io.fetchIssuePort.PC, 2)
   poke(dut.io.fetchIssuePort.instruction, Integer.parseInt("7d008113", 16))
   poke(dut.io.writeBackResult.rd, 1)
   poke(dut.io.writeBackResult.rdData, 1050)
   poke(dut.io.writeBackResult.toRegisterFile, 1)
-  poke(dut.io.pipeLineStalled, 0)
+  poke(dut.io.readyIn, 1)
 
   step(1)
 
-  poke(dut.io.fetchIssuePort.valid, 1)
+  poke(dut.io.fetchIssuePort.valid, 0)
   poke(dut.io.fetchIssuePort.PC, 2)
   poke(dut.io.fetchIssuePort.instruction, Integer.parseInt("7d008113", 16))
   poke(dut.io.writeBackResult.rd, 5)
   poke(dut.io.writeBackResult.rdData, 1250)
   poke(dut.io.writeBackResult.toRegisterFile, 0)
-  poke(dut.io.pipeLineStalled, 1)
+  poke(dut.io.readyIn, 0)
 
   step(1)
 
-  poke(dut.io.fetchIssuePort.valid, 1)
+  poke(dut.io.fetchIssuePort.valid, 0)
   poke(dut.io.fetchIssuePort.PC, 2)
   poke(dut.io.fetchIssuePort.instruction, Integer.parseInt("7d008113", 16))
   poke(dut.io.writeBackResult.rd, 5)
   poke(dut.io.writeBackResult.rdData, 1250)
   poke(dut.io.writeBackResult.toRegisterFile, 0)
-  poke(dut.io.pipeLineStalled, 0)
+  poke(dut.io.readyIn, 1)
 
   step(1)
 //
