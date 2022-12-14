@@ -2,6 +2,9 @@ package pipeline.memory
 
 import chisel3._
 import chisel3.util._
+import chisel3.experimental.BundleLiterals._
+
+import common._
 
 import scala.math._
 
@@ -63,6 +66,15 @@ class channel_d(
 }
 
 class MemoryUnit extends Module {
+
+    def assertInstr(instr: String = "add x0, x0, x0", pc: Int = 0) = {
+        (new AluIssuePort()).Lit(
+        _.instruction -> common.getreadInstr().U, 
+        _.nextInstPtr -> 1.U, 
+        _.aluResult -> 2.U, 
+        _.rs2 -> 3.U)
+    }
+
     val io = IO(new Bundle(){
         val aluIssuePort = new handshake(new AluIssuePort())
         val memoryIssuePort = Flipped(new handshake(new MemoryIssuePort()))
@@ -165,7 +177,7 @@ class MemoryUnit extends Module {
 
     switch(state_reg){
         is(pass_through){
-            when(io.memoryIssuePort.ready){
+            when(io.memoryIssuePort.ready || (io.aluIssuePort.valid && BitPat("b0?00011") === io.aluIssuePort.bits.instruction(6,0))){
                 resultsBuffer.instruction := io.aluIssuePort.bits.instruction
                 resultsBuffer.nextInstPtr := io.aluIssuePort.bits.nextInstPtr
                 resultsBuffer.aluResult := io.aluIssuePort.bits.aluResult
@@ -183,7 +195,7 @@ class MemoryUnit extends Module {
                     memReqBuffer.data := io.aluIssuePort.bits.rs2
                     bufferedAluResult := io.aluIssuePort.bits // to shape realign data once arrived
                 }
-            }.otherwise {
+            }.elsewhen(io.aluIssuePort.valid) {
                 bufferedAluResult := io.aluIssuePort.bits
                 state_reg := wait_writeback
             }
