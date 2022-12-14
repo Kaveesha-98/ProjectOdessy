@@ -15,14 +15,26 @@ class GCDSpec extends AnyFreeSpec with ChiselScalatestTester {
         dut.reset
         dut.clock.step(1)
 
-        dut.io.aluIssuePort.bits.poke({
-            (new AluIssuePort()).Lit(
-            _.instruction -> 0.U, 
-            _.nextInstPtr -> 1.U, 
-            _.aluResult -> 2.U, 
-            _.rs2 -> 3.U)
-        })
+        dut.io.aluIssuePort.bits.poke(dut.assertInstr())
+        dut.io.aluIssuePort.valid.poke(true.B)
+        dut.io.memPort.a.valid.expect(false.B)
+        dut.clock.step(4)
+        dut.io.memoryIssuePort.ready.poke(true.B)
+        dut.clock.step(4)
+        dut.io.aluIssuePort.ready.expect(false.B)
+        dut.io.memPort.a.valid.expect(true.B)
+
+        dut.io.memPort.a.ready.poke(1.U)
         dut.clock.step(1)
+        //once mem requested is accpted no more memory
+        //requests should be issued until a mem accesses
+        //is accepted from aluIssuePort
+        dut.io.memPort.a.valid.expect(0.U)
+        dut.io.memPort.d.ready.expect(1.U)
+        //no instruction should be issued from memIssuePort
+        dut.io.memoryIssuePort.valid.expect(false.B)
+
+        
 
       }
     }
