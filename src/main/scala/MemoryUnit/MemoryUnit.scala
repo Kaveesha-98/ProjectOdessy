@@ -248,6 +248,6 @@ class MemoryUnit extends Module {
     io.memPort.d.ready := state_reg === wait_mem_resp
 }
 
-object ALU extends App{
+object MemoryUnit extends App{
     (new chisel3.stage.ChiselStage).emitVerilog(new MemoryUnit())
 }
