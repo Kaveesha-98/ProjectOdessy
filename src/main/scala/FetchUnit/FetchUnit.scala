@@ -1,8 +1,12 @@
+package pipeline
+
 /*
  Fetch Unit for in-order without speculation
  */
 
 import chisel3._
+
+
 
 class branch_detector extends Module {
   val io = IO(new Bundle {

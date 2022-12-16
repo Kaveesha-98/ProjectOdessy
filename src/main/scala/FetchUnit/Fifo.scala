@@ -1,3 +1,5 @@
+package pipeline
+
 import Chisel.log2Ceil
 import chisel3._
 
