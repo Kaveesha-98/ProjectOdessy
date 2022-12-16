@@ -1,4 +1,4 @@
-package pipeline
+package pipeline.fetch
 
 /*
  Fetch Unit for in-order without speculation
