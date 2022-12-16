@@ -8,11 +8,9 @@ import chisel3.experimental.BundleLiterals._
 import common._
 
 class hart extends Module{
-    val fetch = Module(new FetchUnit(16, 2))
-    val instPort = IO(fetch.io.cloneType)
-    fetch.io <> instPort
-    /* val decode = Module(new DECODE_ISSUE_UNIT())
-    val memory_access = Module(new MemoryUnit())
+    val fetchUnit = Module(new fetch.FetchUnit(16, 2))
+    val decodeUnit = Module(new decode.DECODE_ISSUE_UNIT())
+    val memoryAccessUnit = Module(new MemoryUnit())
 
     val io = IO(new Bundle(){
 
@@ -28,19 +26,27 @@ class hart extends Module{
 
     })
 
-    val dataMemPort = IO(memory_access.io.memPort.cloneType())
-    dataMemPort <> memory_access.io.memPort
+    val dataMemPort = IO(memoryAccessUnit.io.memPort.cloneType)
+    dataMemPort <> memoryAccessUnit.io.memPort
 
-    io.reqport_valid <> fetch.io.reqport_valid
-    io.reqport_ready <> fetch.io.reqport_ready
-    io.reqport_addr <> fetch.io.reqport_addr
+    io.reqport_valid <> fetchUnit.io.reqport_valid
+    io.reqport_ready <> fetchUnit.io.reqport_ready
+    io.reqport_addr <> fetchUnit.io.reqport_addr
 
-    io.resport_valid <> fetch.io.resport_valid
-    io.resport_ready <> fetch.io.resport_ready
-    io.resport_instr <> fetch.io.resport_instr
+    io.resport_valid <> fetchUnit.io.resport_valid
+    io.resport_ready <> fetchUnit.io.resport_ready
+    io.resport_instr <> fetchUnit.io.resport_instr
 
-     */
+    /* val issueport_valid = Output(UInt(1.W))
+    val issueport_instr = Output(UInt(32.W))
+    val issueport_pc = Output(UInt(64.W)) */
 
+    decodeUnit.io.fetchIssuePort.valid <> fetchUnit.io.issueport_valid
+    decodeUnit.io.fetchIssuePort.instruction <> fetchUnit.io.issueport_instr
+    decodeUnit.io.fetchIssuePort.PC <> fetchUnit.io.issueport_pc
+    decodeUnit.io.readyOut <> fetchUnit.io.pipelinestalled
+
+    decodeUnit.io.decodeIssuePort
 }
 
 object hart extends App{
