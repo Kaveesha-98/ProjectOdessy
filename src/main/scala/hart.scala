@@ -10,7 +10,7 @@ import common._
 class hart extends Module{
     val fetchUnit = Module(new fetch.FetchUnit(16, 2))
     val decodeUnit = Module(new decode.DECODE_ISSUE_UNIT())
-    val memoryAccessUnit = Module(new MemoryUnit())
+    val memoryAccessUnit = Module(new memory.MemoryUnit())
 
     val io = IO(new Bundle(){
 
@@ -46,7 +46,30 @@ class hart extends Module{
     decodeUnit.io.fetchIssuePort.PC <> fetchUnit.io.issueport_pc
     decodeUnit.io.readyOut <> fetchUnit.io.pipelinestalled
 
-    decodeUnit.io.decodeIssuePort
+    decodeUnit.io.decodeIssuePort.valid <> memoryAccessUnit.io.aluIssuePort.valid
+    decodeUnit.io.decodeIssuePort.instruction <> memoryAccessUnit.io.aluIssuePort.bits.instruction
+    decodeUnit.io.decodeIssuePort.PC <> memoryAccessUnit.io.aluIssuePort.bits.nextInstPtr
+    decodeUnit.io.decodeIssuePort.rs1 <> memoryAccessUnit.io.aluIssuePort.bits.aluResult
+    decodeUnit.io.decodeIssuePort.rs2 <> memoryAccessUnit.io.aluIssuePort.bits.rs2
+    decodeUnit.io.readyIn := memoryAccessUnit.io.aluIssuePort.ready.asUInt
+
+    val memIssueOp = memoryAccessUnit.io.memoryIssuePort.bits.instruction(6, 0)
+
+    decodeUnit.io.writeBackResult.toRegisterFile := Seq(
+        "b0000011".U, "b0010011".U, "b0110011".U
+    ).map(op => op === memIssueOp).reduce(_ || _)
+
+    decodeUnit.io.writeBackResult.rd := memoryAccessUnit.io.memoryIssuePort.bits.instruction(11, 7)
+    decodeUnit.io.writeBackResult.rdData := memoryAccessUnit.io.memoryIssuePort.bits.aluResult
+
+    val decodeIssuedBranch = Seq(
+        "b1101111".U, "b1100111".U, "b1100011".U
+    ).map(op => op === decodeUnit.io.decodeIssuePort.instruction(6, 0)).reduce(_ || _)
+    
+    fetchUnit.io.target_valid := (decodeUnit.io.decodeIssuePort.valid.asBool && decodeIssuedBranch && memoryAccessUnit.io.aluIssuePort.ready).asUInt
+    fetchUnit.io.target_input := decodeUnit.io.decodeIssuePort.PC + 4.U
+
+    memoryAccessUnit.io.memoryIssuePort.ready := true.B
 }
 
 object hart extends App{
