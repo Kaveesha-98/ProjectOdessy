@@ -1,4 +1,4 @@
-package pipeline
+package pipeline.fetch
 
 import Chisel.log2Ceil
 import chisel3._
