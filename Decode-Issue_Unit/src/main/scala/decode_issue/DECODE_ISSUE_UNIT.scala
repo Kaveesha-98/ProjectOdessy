@@ -5,16 +5,20 @@ import Constants._
 import chisel3._
 import chisel3.util._
 
+class handshake[T <: Data](gen: T) extends Bundle {
+  val ready = Output(UInt(1.W))
+  val valid = Input(UInt(1.W))
+  val bits  = Input(gen)
+}
+
 // Inputs from Fetch unit
 class FetchIssuePort extends Bundle {
-  val valid       = UInt(1.W)
   val instruction = UInt(32.W)
   val PC          = UInt(64.W)
 }
 
 // Outputs for ALU
 class DecodeIssuePort extends Bundle {
-  val valid       = UInt(1.W)
   val instruction = UInt(32.W)
   val PC          = UInt(64.W)
   val opCode      = UInt(7.W)
@@ -31,22 +35,20 @@ class WriteBackResult extends Bundle {
 }
 
 class DECODE_ISSUE_UNIT extends Module{
-  val io = IO(new Bundle() {
-    val fetchIssuePort  = Input(new FetchIssuePort)
-    val decodeIssuePort = Output(new DecodeIssuePort)
+  val io = IO(new Bundle {
+    val fetchIssuePort  = new handshake(new FetchIssuePort)
+    val decodeIssuePort = Flipped(new handshake(new DecodeIssuePort))
     val writeBackResult = Input(new WriteBackResult)
-    val readyOut        = Output(UInt(1.W))             // ready signal for Fetch unit
-    val readyIn         = Input(UInt(1.W))              // ready signal from ALU
   })
 
   // Assigning some wires for inputs
   val validIn   = io.fetchIssuePort.valid
-  val pc        = io.fetchIssuePort.PC
+  val pc        = io.fetchIssuePort.bits.PC
   val writeEn   = io.writeBackResult.toRegisterFile
   val writeData = io.writeBackResult.rdData
   val writeRd   = Wire(UInt(1.W))
   writeRd      := io.writeBackResult.rd
-  val readyIn   = io.readyIn
+  val readyIn   = io.decodeIssuePort.ready
 
   // Inintializing some registers for outputs
   val pcReg     = RegInit(0.U(64.W))
@@ -68,21 +70,21 @@ class DECODE_ISSUE_UNIT extends Module{
 
   pcReg  := pc
   // Storing instruction value in a register
-  when(io.fetchIssuePort.valid === 1.U & io.readyOut === 1.U) {
-    insReg := io.fetchIssuePort.instruction
+  when(io.fetchIssuePort.valid === 1.U & io.fetchIssuePort.ready === 1.U) {
+    insReg := io.fetchIssuePort.bits.instruction
   }
 
-  ins := Mux(io.fetchIssuePort.valid === 1.U & io.readyOut === 1.U, io.fetchIssuePort.instruction, insReg)
+  ins := Mux(io.fetchIssuePort.valid === 1.U & io.fetchIssuePort.ready === 1.U, io.fetchIssuePort.bits.instruction, insReg)
 
   // Assigning outputs
-  io.decodeIssuePort.PC          := pcReg
-  io.decodeIssuePort.instruction := insReg
-  io.decodeIssuePort.opCode      := opCodeReg
-  io.decodeIssuePort.immediate   := immReg
-  io.decodeIssuePort.valid       := validOut
-  io.decodeIssuePort.rs1         := rs1Reg
-  io.decodeIssuePort.rs2         := rs2Reg
-  io.readyOut                    := readyOut
+  io.decodeIssuePort.bits.PC          := pcReg
+  io.decodeIssuePort.bits.instruction := insReg
+  io.decodeIssuePort.bits.opCode      := opCodeReg
+  io.decodeIssuePort.bits.immediate   := immReg
+  io.decodeIssuePort.valid            := validOut
+  io.decodeIssuePort.bits.rs1         := rs1Reg
+  io.decodeIssuePort.bits.rs2         := rs2Reg
+  io.fetchIssuePort.ready             := readyOut
 
   // Deciding the instruction type
   switch (ins(6,0)) {
@@ -187,5 +189,5 @@ class DECODE_ISSUE_UNIT extends Module{
 }
 
 object DECODE_ISSUE_UNIT extends App{
-  (new chisel3.stage.ChiselStage).emitVerilog(new DECODE_ISSUE_UNIT())
+  emitVerilog(new DECODE_ISSUE_UNIT())
 }
