@@ -46,6 +46,40 @@ class channel_a(
     val data        = Output(UInt((8*w).W))
     val valid       = Output(UInt(1.W))
     val ready       = Input(UInt(1.W))
+
+    class sourceReg extends Bundle {
+        val opcode      = Output(UInt(3.W))
+        val param       = Output(UInt(3.W))
+        val size        = Output(UInt(z.W))
+        val source      = Output(UInt(o.W))
+        val address     = Output(UInt(a.W))
+        val mask        = Output(UInt(w.W))
+        val data        = Output(UInt((8*w).W))
+        val valid       = Output(UInt(1.W))
+    }
+
+    def init() =
+        (new sourceReg).Lit(
+            _.opcode -> 0.U,
+            _.param -> 0.U,
+            _.size -> 0.U,
+            _.source -> 0.U,
+            _.address -> 0.U,
+            _.mask -> 0.U,
+            _.data -> 0.U,
+            _.valid -> 0.U
+        )
+
+    def :=(sink: sourceReg):Unit = {
+        this.opcode := sink.opcode
+        this.param       := sink.param
+        this.size        := sink.size
+        this.source      := sink.source
+        this.address     := sink.address
+        this.mask        := sink.mask
+        this.data        := sink.data
+        this.valid       := sink.valid
+    } 
 }
 
 class channel_d(
