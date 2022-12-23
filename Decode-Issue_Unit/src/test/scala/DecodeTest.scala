@@ -2,11 +2,11 @@ import chisel3._
 import chiseltest._
 import org.scalatest.flatspec.AnyFlatSpec
 
-import decode_issue.DECODE_ISSUE_UNIT
+import decode.DecodeUnit
 
 class DecodeTest extends AnyFlatSpec with ChiselScalatestTester {
   "DUT" should "pass" in {
-    test(new DECODE_ISSUE_UNIT).withAnnotations(Seq(WriteVcdAnnotation)) { dut =>
+    test(new DecodeUnit).withAnnotations(Seq(WriteVcdAnnotation)) { dut =>
       var step = 0
 
       println("Step " + step + ", validOut = " + dut.io.decodeIssuePort.valid.peek().toString())

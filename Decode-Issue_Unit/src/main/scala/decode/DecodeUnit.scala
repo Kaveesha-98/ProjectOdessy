@@ -1,4 +1,4 @@
-package decode_issue
+package decode
 
 import Constants._
 
@@ -34,7 +34,7 @@ class WriteBackResult extends Bundle {
   val rdData         = UInt(64.W)
 }
 
-class DECODE_ISSUE_UNIT extends Module{
+class DecodeUnit extends Module{
   val io = IO(new Bundle {
     val fetchIssuePort  = new handshake(new FetchIssuePort)
     val decodeIssuePort = Flipped(new handshake(new DecodeIssuePort))
@@ -50,7 +50,7 @@ class DECODE_ISSUE_UNIT extends Module{
   writeRd      := io.writeBackResult.rd
   val readyIn   = io.decodeIssuePort.ready
 
-  // Inintializing some registers for outputs
+  // Initializing some registers for outputs
   val pcReg     = RegInit(0.U(64.W))
   val insReg    = RegInit(0.U(32.W))
   val opCodeReg = RegInit(0.U(7.W))
@@ -189,5 +189,5 @@ class DECODE_ISSUE_UNIT extends Module{
 }
 
 object DECODE_ISSUE_UNIT extends App{
-  emitVerilog(new DECODE_ISSUE_UNIT())
+  emitVerilog(new DecodeUnit())
 }

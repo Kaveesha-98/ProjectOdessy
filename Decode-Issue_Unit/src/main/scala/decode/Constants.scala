@@ -1,4 +1,4 @@
-package decode_issue
+package decode
 
 object Constants {
   val lui = "b0110111"
