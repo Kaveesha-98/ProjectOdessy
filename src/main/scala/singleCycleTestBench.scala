@@ -8,7 +8,7 @@ import common._
 import java.nio.file.{Files, Paths}
 
 class singleCycleTestBench extends Module {
-    val byteArray = Files.readAllBytes(Paths.get("/mnt/AE06F37906F3413F/University/GitHub/ProjectOdessy/src/test/scala/entry.text"))
+    val byteArray = Files.readAllBytes(Paths.get("src/test/scala/entry.text"))
     val programMemory = VecInit(byteArray.map(i => (i&255).U(8.W)))
 
     val testHart = Module(new singleCycleHart)
@@ -28,4 +28,7 @@ class singleCycleTestBench extends Module {
     testHart.dataPort.d := testHart.dataPort.d.init()
 
     testHart.dataPort.a.ready := 1.U
+}
+object singleCycleTestBench extends App{
+    (new chisel3.stage.ChiselStage).emitVerilog(new singleCycleTestBench())
 }
