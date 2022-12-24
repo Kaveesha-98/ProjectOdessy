@@ -64,15 +64,15 @@ class singleCycleHart extends Module {
     val extractImmBits = extractImm(io.resport_instr)_
 
     val immediate = MuxLookup(io.resport_instr(6, 0), 0.U(64.W), Array(
-        "b0110111".U -> extractImmBits(Array((31, 12), (0, 12))), // lui
-        "b0010111".U -> extractImmBits(Array((31, 12), (0, 12))), // auipc
-        "b1101111".U -> extractImmBits(Array((1, 12), (19, 12), (20, 20), (30, 21), (0, 1))), // jal
-        "b1100111".U -> extractImmBits(Array((1, 20), (31, 20))), // jal
-        "b1100011".U -> extractImmBits(Array((1, 21), (7, 7), (30, 25), (11, 8), (0, 1))),
-        "b0000011".U -> extractImmBits(Array((1, 20), (31, 20))), // loads
-        "b0100011".U -> extractImmBits(Array((1, 20), (31, 25), (11, 7))), // stores
-        "b0010011".U -> extractImmBits(Array((1, 20), (31, 20))), // arithmetic immediates
-        "b0011011".U -> extractImmBits(Array((1, 20), (31, 20))) //addiw
+        "b0110111".U -> extractImmBits(Array((1, 32), (31, 12), (0, 12))), // lui
+        "b0010111".U -> extractImmBits(Array((1, 32), (31, 12), (0, 12))), // auipc
+        "b1101111".U -> extractImmBits(Array((1, 12+32), (19, 12), (20, 20), (30, 21), (0, 1))), // jal
+        "b1100111".U -> extractImmBits(Array((1, 20+32), (31, 20))), // jal
+        "b1100011".U -> extractImmBits(Array((1, 21+32), (7, 7), (30, 25), (11, 8), (0, 1))),
+        "b0000011".U -> extractImmBits(Array((1, 20+32), (31, 20))), // loads
+        "b0100011".U -> extractImmBits(Array((1, 20+32), (31, 25), (11, 7))), // stores
+        "b0010011".U -> extractImmBits(Array((1, 20+32), (31, 20))), // arithmetic immediates
+        "b0011011".U -> extractImmBits(Array((1, 20+32), (31, 20))) //addiw
     ))
 
     val address = rs1 + immediate
@@ -125,7 +125,7 @@ class singleCycleHart extends Module {
     ).foldRight(0.U(64.W))(getResult)
     
     writesRegFile := Seq(
-        "b0000011".U, "b0010011".U, "b0110011".U, 
+        "b0000011".U, "b0010011".U, "b0110011".U, "b0011011".U,
         "b0110111".U, "b0010111".U, "b1101111".U, "b1100111".U
     ).map(op => op === io.resport_instr(6, 0)).reduce(_ || _)
 
