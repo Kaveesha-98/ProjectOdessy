@@ -35,7 +35,7 @@ class WriteBackResult extends Bundle {
 }
 
 class DecodeUnit extends Module{
-  val io = IO(new Bundle {
+  val io = IO(new Bundle() {
     val fetchIssuePort  = new handshake(new FetchIssuePort)
     val decodeIssuePort = Flipped(new handshake(new DecodeIssuePort))
     val writeBackResult = Input(new WriteBackResult)
@@ -51,12 +51,23 @@ class DecodeUnit extends Module{
   val readyIn   = io.decodeIssuePort.ready
 
   // Initializing some registers for outputs
-  val pcReg     = RegInit(0.U(64.W))
-  val insReg    = RegInit(0.U(32.W))
-  val opCodeReg = RegInit(0.U(7.W))
-  val immReg    = RegInit(0.U(64.W))
-  val rs1Reg    = RegInit(0.U(64.W))
-  val rs2Reg    = RegInit(0.U(64.W))
+  val decodeIssueBuffer = RegInit({
+    val initialState = Wire(new Bundle() {
+      val pc = UInt(64.W)
+      val ins = UInt(32.W)
+      val opCode = UInt(7.W)
+      val imm = UInt(64.W)
+      val rs1 = UInt(64.W)
+      val rs2 = UInt(64.W)
+    })
+    initialState.pc := 0.U
+    initialState.ins := 0.U
+    initialState.opCode := 0.U
+    initialState.imm := 0.U
+    initialState.rs1 := 0.U
+    initialState.rs2 := 0.U
+    initialState
+  })
 
   // Initializing some intermediate wires
   val validOut  = WireDefault(0.U(1.W))
@@ -68,22 +79,22 @@ class DecodeUnit extends Module{
   val stalled   = WireDefault(0.U(1.W))
   val ins       = WireDefault(0.U(32.W))
 
-  pcReg  := pc
+  decodeIssueBuffer.pc  := pc
   // Storing instruction value in a register
   when(io.fetchIssuePort.valid === 1.U & io.fetchIssuePort.ready === 1.U) {
-    insReg := io.fetchIssuePort.bits.instruction
+    decodeIssueBuffer.ins := io.fetchIssuePort.bits.instruction
   }
 
-  ins := Mux(io.fetchIssuePort.valid === 1.U & io.fetchIssuePort.ready === 1.U, io.fetchIssuePort.bits.instruction, insReg)
+  ins := Mux(io.fetchIssuePort.valid === 1.U & io.fetchIssuePort.ready === 1.U, io.fetchIssuePort.bits.instruction, decodeIssueBuffer.ins)
 
   // Assigning outputs
-  io.decodeIssuePort.bits.PC          := pcReg
-  io.decodeIssuePort.bits.instruction := insReg
-  io.decodeIssuePort.bits.opCode      := opCodeReg
-  io.decodeIssuePort.bits.immediate   := immReg
+  io.decodeIssuePort.bits.PC          := decodeIssueBuffer.pc
+  io.decodeIssuePort.bits.instruction := decodeIssueBuffer.ins
+  io.decodeIssuePort.bits.opCode      := decodeIssueBuffer.opCode
+  io.decodeIssuePort.bits.immediate   := decodeIssueBuffer.imm
   io.decodeIssuePort.valid            := validOut
-  io.decodeIssuePort.bits.rs1         := rs1Reg
-  io.decodeIssuePort.bits.rs2         := rs2Reg
+  io.decodeIssuePort.bits.rs1         := decodeIssueBuffer.rs1
+  io.decodeIssuePort.bits.rs2         := decodeIssueBuffer.rs2
   io.fetchIssuePort.ready             := readyOut
 
   // Deciding the instruction type
@@ -106,13 +117,13 @@ class DecodeUnit extends Module{
 
   // Calculating the immediate value
   switch (insType) {
-    is(itype.U) { immReg := Cat(Fill(53, ins(31)), ins(30, 20)) }
-    is(stype.U) { immReg := Cat(Fill(53, ins(31)), ins(30,25), ins(11, 7)) }
-    is(btype.U) { immReg := Cat(Fill(53, ins(31)), ins(7), ins(30,25), ins(11,8), 0.U(1.W)) }
-    is(utype.U) { immReg := Cat(Fill(32, ins(31)), ins(31,12), 0.U(12.W)) }
-    is(jtype.U) { immReg := Cat(Fill(44, ins(31)), ins(19,12), ins(20), ins(30,25), ins(24,21), 0.U(1.W)) }
-    is(ntype.U) { immReg := Fill(64, 0.U) }
-    is(rtype.U) { immReg := Fill(64, 0.U) }
+    is(itype.U) { decodeIssueBuffer.imm := Cat(Fill(53, ins(31)), ins(30, 20)) }
+    is(stype.U) { decodeIssueBuffer.imm := Cat(Fill(53, ins(31)), ins(30,25), ins(11, 7)) }
+    is(btype.U) { decodeIssueBuffer.imm := Cat(Fill(53, ins(31)), ins(7), ins(30,25), ins(11,8), 0.U(1.W)) }
+    is(utype.U) { decodeIssueBuffer.imm := Cat(Fill(32, ins(31)), ins(31,12), 0.U(12.W)) }
+    is(jtype.U) { decodeIssueBuffer.imm := Cat(Fill(44, ins(31)), ins(19,12), ins(20), ins(30,25), ins(24,21), 0.U(1.W)) }
+    is(ntype.U) { decodeIssueBuffer.imm := Fill(64, 0.U) }
+    is(rtype.U) { decodeIssueBuffer.imm := Fill(64, 0.U) }
   }
 
   // Valid bits for each register
@@ -123,10 +134,10 @@ class DecodeUnit extends Module{
   val registerFile = Reg(Vec(32, UInt(64.W)))
   registerFile(0) := 0.U
 
-  rs1Reg := registerFile(ins(19, 15))
-  rs2Reg := registerFile(ins(24, 20))
+  decodeIssueBuffer.rs1 := registerFile(ins(19, 15))
+  decodeIssueBuffer.rs2 := registerFile(ins(24, 20))
 
-  opCodeReg := ins(6, 0)
+  decodeIssueBuffer.opCode := ins(6, 0)
 
   // Register writing
   when(writeEn === 1.U & validBit(writeRd) === 0.U & writeRd =/= 0.U) {
