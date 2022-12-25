@@ -126,7 +126,7 @@ switch (stateReg){
         nextInstPtrReg          := rs1Reg + immReg
         branchResultValidReg    := 1.U
         branchResultTargetReg   := rs1Reg + immReg               
-        }
+      }
       
       is (cjump.U){
 
@@ -242,19 +242,23 @@ switch (stateReg){
           }
 
           is (001) {      //SLLI
-            aluResultReg := 
+            aluResultReg := rs1Reg << immReg(4,0)
           }
 
           is (101) {      //SRLI
             when (funct7Reg === 0000000) {
-
-            }.otherwise{
+              aluResultReg := rs1Reg >> immReg(4,0)              
+            }.otherwise{  //SRAI
 
             }
           }
 
 
         }        
+      }
+
+      is (rops.U){
+        
       }
 
      
