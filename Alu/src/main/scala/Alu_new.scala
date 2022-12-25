@@ -258,9 +258,71 @@ switch (stateReg){
       }
 
       is (rops.U){
-        
+        branchResultValidReg := 0.U
+        nextInstPtrReg :- pcReg + 4.U
+
+        switch (funct3Reg){
+          is (000){
+            when (funct7Reg === 0000000){       //ADD
+              aluResultReg := rs1Reg + rs2Reg
+            }.otherwise {                       //SUB
+              aluResultReg := rs1Reg - rs2Reg     
+            }
+          }
+
+          is (001){
+              aluResultReg :- rs1Reg << rs2Reg  //SLL 
+          }
+
+          is (010){     //SLT
+            when (rs1Reg < rs2Reg){
+              aluResultReg := 1.U
+            }.otherwise {
+              aluResultReg := 0.U
+            }
+          }
+
+          is (011){         //SLTU   This is the same as SLT for now. CHANGE!
+            when (rs1Reg < rs2Reg){
+              aluResultReg := 1.U
+            }.otherwise {
+              aluResultReg := 0.U
+            }
+          }  
+
+          is (100){         //XOR
+            aluResultReg := rs1Reg ^ rs2Reg
+          }   
+
+          is (101){
+            when (funct7Reg === 0000000){       //SRL
+              aluResultReg := rs1Reg >> rs2Reg
+            }.otherwise {                       //SRA
+              //<add implementation here>    
+            }
+          }
+
+          is (110){     //OR
+            aluResultReg := rs1Reg | rs2Reg
+          }
+
+          is (111){
+            aluResultReg := rs1Reg & rs2Reg
+          }
+        }        
       }
 
+      is (load.U){
+        branchResultValidReg := 0.U
+        nextInstPtrReg :- pcReg + 4.U
+        //<add load instruction implementation here>        
+      }
+
+      is (store.U){
+        branchResultValidReg := 0.U
+        nextInstPtrReg :- pcReg + 4.U
+        //<add store instruction implementation here>        
+      }
      
       
 
