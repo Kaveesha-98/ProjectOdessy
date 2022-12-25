@@ -49,6 +49,7 @@ class Alu extends Module{
   val rs1Reg   = RegInit(0.U(64.W))
   val rs2Reg   = RegInit(0.U(64.W))
   val opCodeReg= RegInit(0.U(7.W))
+  val funct3Reg = RegInit(0.U(3.W))
 
   pcReg     := io.decodeIssuePort.PC
   insReg    := io.decodeIssuePort.instruction
@@ -57,6 +58,7 @@ class Alu extends Module{
   rs2Reg    := io.decodeIssuePort.rs2
   opCodeReg := io.decodeIssuePort.opCode
   funct3Reg := io.decodeIssuePort.instruction(14,12)
+  funct7Reg := io.decodeIssuePort.instruction(31,25)
 
 
 val aluResultReg = RegInit(0.U(64.W))
@@ -71,7 +73,7 @@ io.branchResult.target := branchResultTargetReg
   
 
 
-  switch (opCode) {
+  switch (opCodeReg) {
     is(lui.U)    { 
       aluResultReg            := immReg
       nextInstPtrReg          := pcReg + 4.U
@@ -96,7 +98,7 @@ io.branchResult.target := branchResultTargetReg
       branchResultTargetReg   := rs1Reg + immReg               
      }
     is(cjump.U)  { 
-      //impelment conditional jump
+      //implement conditional jump
      }
     is(load.U)   { 
       //implement LB,LW,LH,LBU,LHU
