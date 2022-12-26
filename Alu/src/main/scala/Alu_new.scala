@@ -157,7 +157,7 @@ switch (stateReg){
           }            
           
           is (100) {      //BLT
-            when (rs1Reg < rs2Reg){
+            when (rs1Reg.asSInt < rs2Reg.asSInt){ // this should be signed comparision
               nextInstPtrReg := pcReg + immReg
               branchResultTargetReg := pcReg + immReg 
             }.otherwise{
@@ -169,7 +169,7 @@ switch (stateReg){
           }
 
           is (101) {      //BGE
-            when (rs1Reg >= rs2Reg){
+            when (rs1Reg.asSInt >= rs2Reg.asSInt){ // this should be a signed comparision
               nextInstPtrReg := pcReg + immReg
               branchResultTargetReg := pcReg + immReg 
             }.otherwise{
@@ -181,7 +181,7 @@ switch (stateReg){
           }
 
           is (110) {      //BLTU
-            when (rs1Reg.U < rs2Reg.U){
+            when (rs1Reg.U < rs2Reg.U){ // this might throw an error rs*Reg are already UInt
               nextInstPtrReg := pcReg + immReg
               branchResultTargetReg := pcReg + immReg 
             }.otherwise{
@@ -193,7 +193,7 @@ switch (stateReg){
           }
 
           is (111) {      //BGEU
-            when (rs1Reg.U >= rs2Reg.U){
+            when (rs1Reg.U >= rs2Reg.U){ // this might throw an error rs*Reg are already UInt
               nextInstPtrReg := pcReg + immReg
               branchResultTargetReg := pcReg + immReg 
             }.otherwise{
@@ -219,7 +219,7 @@ switch (stateReg){
           }
 
           is (010) {      //SLTI
-            when (rs1Reg < immReg){
+            when (rs1Reg.asSInt < immReg.asSInt){ // this is a signed comparision
               aluResultReg := 1.U
             }.otherwise {
               aluResultReg := 0.U
@@ -227,6 +227,7 @@ switch (stateReg){
           }            
           
           is (011) {      //SLTIU
+            // same code as above without ".asSInt"
           }
 
           is (100) {      //XORI
@@ -242,14 +243,14 @@ switch (stateReg){
           }
 
           is (001) {      //SLLI
-            aluResultReg := rs1Reg << immReg(4,0)
+            aluResultReg := rs1Reg << immReg(5,0) // this is the 64 bit version shamt field is 6-bits wide
           }
 
           is (101) {      //SRLI
             when (funct7Reg === 0000000) {
-              aluResultReg := rs1Reg >> immReg(4,0)              
+              aluResultReg := rs1Reg >> immReg(5, 0)           // this is the 64 bit version shamt field is 6-bits wide   
             }.otherwise{  //SRAI
-
+              aluResultReg := (rs1Reg.asSInt >> immReg(5, 0)).asUInt // for this rs1 is considered to be a signed int
             }
           }
 
@@ -271,11 +272,13 @@ switch (stateReg){
           }
 
           is (001){
-              aluResultReg :- rs1Reg << rs2Reg  //SLL 
+              aluResultReg := rs1Reg << rs2Reg  //SLL - might throw an error
+              // if the above line throws an error try - 
+              // Mux(rs2(31, 5).orR, 0.U, rs1 << rs2(5, 0)) 
           }
 
           is (010){     //SLT
-            when (rs1Reg < rs2Reg){
+            when (rs1Reg.asSInt < rs2Reg.asSInt){ // this is a signed compare
               aluResultReg := 1.U
             }.otherwise {
               aluResultReg := 0.U
@@ -298,7 +301,8 @@ switch (stateReg){
             when (funct7Reg === 0000000){       //SRL
               aluResultReg := rs1Reg >> rs2Reg
             }.otherwise {                       //SRA
-              //<add implementation here>    
+              //<add implementation here>
+              aluResultReg := rs1Reg.asSInt >> rs2Reg // rs1 is treated as a signed number   
             }
           }
 
