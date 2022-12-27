@@ -1,4 +1,4 @@
-package pipeline.decode
+package decode
 
 object Constants {
   val lui = "b0110111"
