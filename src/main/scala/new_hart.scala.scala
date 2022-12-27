@@ -20,8 +20,8 @@ class singleCycleHart extends Module {
     })
 
     val dataPort = IO(new Bundle{
-        val a = new memory.channel_a()
-        val d = new memory.channel_d()
+        val a = new channel_a()
+        val d = new channel_d()
     })
 
     def extractImm(bigWire: UInt)(concats: Array[(Int, Int)]) = 
