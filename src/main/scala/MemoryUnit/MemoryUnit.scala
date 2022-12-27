@@ -117,7 +117,7 @@ class MemoryUnit extends Module {
             }
         }
         is(waitOnMemReq) {
-            when(dataPort.a.ready.asBool) { stateReg := waitOnMemResp }
+            when(dataPort.a.ready.asBool) { stateReg := Mux(aluIssuePort.bits.instruction(5).asBool, waitWriteBack, waitOnMemResp) }
         }
         is(waitOnMemResp) {
             when(dataPort.d.valid.asBool) {
