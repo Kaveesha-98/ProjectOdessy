@@ -1,4 +1,4 @@
-package decode
+package pipeline.decode
 
 import Constants._
 
