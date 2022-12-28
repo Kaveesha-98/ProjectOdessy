@@ -51,7 +51,7 @@ class FetchUnit(val pc_reset_val: Int, val fifo_size: Int) extends Module {
 
   })
   //register defs
-  val PC = RegInit(pc_reset_val.U(64.W))
+  val PC = RegInit("h80000000".U(64.W))
   val IR = RegInit(0.U(32.W))
   val internal_stall = RegInit(0.U(1.W))
   val IR_valid = RegInit(0.U(1.W))
@@ -108,7 +108,7 @@ class FetchUnit(val pc_reset_val: Int, val fifo_size: Int) extends Module {
   } .elsewhen (PC_fifo.io.deq.valid === 0.U & PC_valid === 1.U){
     internal_stall := 0.U
   }
-  printf(p"$io\n")
+  //printf(p"$io\n")
 }
 
 /**
