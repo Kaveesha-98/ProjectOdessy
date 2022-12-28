@@ -14,7 +14,7 @@ class GCDSpec extends AnyFreeSpec with ChiselScalatestTester {
     test(new MemoryUnit).withAnnotations(Seq(WriteVcdAnnotation))  { dut =>
         dut.reset
         dut.clock.step(1)
-
+/* 
         dut.io.aluIssuePort.bits.poke(dut.assertInstr())
         dut.io.aluIssuePort.valid.poke(true.B)
         dut.io.memPort.a.valid.expect(false.B)
@@ -34,7 +34,7 @@ class GCDSpec extends AnyFreeSpec with ChiselScalatestTester {
         //no instruction should be issued from memIssuePort
         dut.io.memoryIssuePort.valid.expect(false.B)
 
-        
+         */
 
       }
     }
