@@ -56,6 +56,42 @@ val nextInstPtrReg = RegInit(0.U(64.W))
 val branchResultValidReg = RegInit(0.U(1.W))
 val branchResultTargetReg = RegInit(0.U(64.W))
 
+//Defining registers to enable read/write FIFO
+val read_to_fifo = RegInit(false.B)
+val read_from_fifo = RegInit(false.B)
+
+//Initialize FIFOs
+val PC_fifo  = Module(new RegFifo(UInt(64.W), fifo_size))
+PC_fifo.io.enq.bits := io.decodeIssuePort.PC
+PC_fifo.io.enq.valid := read_to_fifo
+PC_fifo.io.deq.ready := read_from_fifo
+
+val ins_fifo  = Module(new RegFifo(UInt(32.W), fifo_size))
+ins_fifo.io.enq.bits := io.decodeIssuePort.PC
+ins_fifo.io.enq.valid := read_to_fifo
+ins_fifo.io.deq.ready := read_from_fifo
+
+val imm_fifo  = Module(new RegFifo(UInt(64.W), fifo_size))
+imm_fifo.io.enq.bits := io.decodeIssuePort.PC
+imm_fifo.io.enq.valid := read_to_fifo
+imm_fifo.io.deq.ready := read_from_fifo
+
+val rs1_fifo  = Module(new RegFifo(UInt(64.W), fifo_size))
+rs1_fifo.io.enq.bits := io.decodeIssuePort.PC
+rs1_fifo.io.enq.valid := read_to_fifo
+rs1_fifo.io.deq.ready := read_from_fifo
+
+val rs2_fifo  = Module(new RegFifo(UInt(64.W), fifo_size))
+rs2_fifo.io.enq.bits := io.decodeIssuePort.PC
+rs2_fifo.io.enq.valid := read_to_fifo
+rs2_fifo.io.deq.ready := read_from_fifo
+
+val opcode_fifo  = Module(new RegFifo(UInt(7.W), fifo_size))
+opcode_fifo.io.enq.bits := io.decodeIssuePort.PC
+opcode_fifo.io.enq.valid := read_to_fifo
+opcode_fifo.io.deq.ready := read_from_fifo
+
+
 
   
 //Defining the 03 states of the ALU
@@ -228,6 +264,11 @@ switch (stateReg){
           
           is (011) {      //SLTIU
             // same code as above without ".asSInt"
+            when (rs1Reg < immReg){ // this is a signed comparision
+              aluResultReg := 1.U
+            }.otherwise {
+              aluResultReg := 0.U
+            }            
           }
 
           is (100) {      //XORI
@@ -285,7 +326,7 @@ switch (stateReg){
             }
           }
 
-          is (011){         //SLTU   This is the same as SLT for now. CHANGE!
+          is (011){         //SLTU   
             when (rs1Reg < rs2Reg){
               aluResultReg := 1.U
             }.otherwise {
@@ -300,8 +341,7 @@ switch (stateReg){
           is (101){
             when (funct7Reg === 0000000){       //SRL
               aluResultReg := rs1Reg >> rs2Reg
-            }.otherwise {                       //SRA
-              //<add implementation here>
+            }.otherwise {                       //SRA  
               aluResultReg := rs1Reg.asSInt >> rs2Reg // rs1 is treated as a signed number   
             }
           }
