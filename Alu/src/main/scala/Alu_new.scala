@@ -57,7 +57,7 @@ val branchResultValidReg = RegInit(0.U(1.W))
 val branchResultTargetReg = RegInit(0.U(64.W))
 
 //Defining registers to enable read/write FIFO
-val read_to_fifo = RegInit(false.B)
+val write_to_fifo = RegInit(false.B)
 val read_from_fifo = RegInit(false.B)
 
 //Initialize FIFOs
@@ -115,7 +115,7 @@ switch (stateReg){
         funct7Reg := io.decodeIssuePort.instruction(31,25)
         stateReg:= EXEC
       } .otherwise{
-        //FIFOIssue port connected to ALU registers
+        read_from_fifo := true.B
 
         stateReg:= EXEC
       }
@@ -124,7 +124,7 @@ switch (stateReg){
         io.UnitStatus.ready := 0.U
         stateReg := EXEC
       }.otherwise{
-        //DecodeIssuePort conneted to the input of the FIFO
+        write_to_fifo := true.B
 
         stateReg:= EXEC
       }
