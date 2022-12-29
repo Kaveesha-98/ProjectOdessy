@@ -157,7 +157,7 @@ class DecodeUnit extends Module{
   when(insType === rtype.U | insType === utype.U | insType === itype.U | insType === jtype.U) {
     when(validBit(ins(11, 7)) === 0.U) { rdValid := 0.U }
     .otherwise {
-      when(rs1Valid === 1.U & rs2Valid === 1.U & readyIn === 1.U  & ins(11, 7) =/= 0.U) { validBit(ins(11, 7)) := 0.U }
+      when(rs1Valid === 1.U & rs2Valid === 1.U & readyIn === 1.U & validOut === 1.U & ins(11, 7) =/= 0.U) { validBit(ins(11, 7)) := 0.U }
     }
   }
 
@@ -179,7 +179,7 @@ class DecodeUnit extends Module{
     is(passthroughState) {
       validOut := 1.U
       readyOut := 1.U
-      stateReg := Mux(stalled === 1.U, stallState, Mux(readyIn === 0.U, waitState, Mux(validIn === 1.U, passthroughState, idleState)))
+      stateReg := Mux(readyIn === 0.U, waitState, Mux(validIn === 1.U, Mux(stalled === 1.U, stallState, passthroughState), idleState))
     }
     is(waitState) {
       validOut := 1.U
