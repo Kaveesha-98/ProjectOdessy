@@ -46,7 +46,7 @@ class DecodeUnit extends Module{
   val pc        = io.fetchIssuePort.bits.PC
   val writeEn   = io.writeBackResult.toRegisterFile
   val writeData = io.writeBackResult.rdData
-  val writeRd   = Wire(UInt(1.W))
+  val writeRd   = Wire(UInt(5.W)) // this should be a 5-wide bus
   writeRd      := io.writeBackResult.rd
   val readyIn   = io.decodeIssuePort.ready
 
@@ -157,11 +157,11 @@ class DecodeUnit extends Module{
   when(insType === rtype.U | insType === utype.U | insType === itype.U | insType === jtype.U) {
     when(validBit(ins(11, 7)) === 0.U) { rdValid := 0.U }
     .otherwise {
-      when(rs1Valid === 1.U & rs2Valid === 1.U & readyIn === 1.U) { validBit(ins(11, 7)) := 0.U }
+      when(rs1Valid === 1.U & rs2Valid === 1.U & readyIn === 1.U  & ins(11, 7) =/= 0.U) { validBit(ins(11, 7)) := 0.U }
     }
   }
 
-  stalled := ~(rdValid & rs1Valid & rs2Valid)     // stall signal for FSM
+  stalled := ~(rdValid & rs1Valid & rs2Valid)  // stall signal for FSM
 
   // FSM for ready valid interface
   // ------------------------------------------------------------------------------------------------------------------ //
