@@ -402,8 +402,7 @@ switch (stateReg){
 /**
  * An object extending App to generate the Verilog code.
  */
-object Verilog extends App {
-  (new chisel3.stage.ChiselStage).emitVerilog(new Alu(32))
+object Alu extends App{
+  emitVerilog(new Alu(32))
 }
-
 
