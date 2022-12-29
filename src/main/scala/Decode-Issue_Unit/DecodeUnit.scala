@@ -46,7 +46,7 @@ class DecodeUnit extends Module{
   val pc        = io.fetchIssuePort.bits.PC
   val writeEn   = io.writeBackResult.toRegisterFile
   val writeData = io.writeBackResult.rdData
-  val writeRd   = Wire(UInt(5.W)) // this should be a 5-wide bus
+  val writeRd   = Wire(UInt(5.W))
   writeRd      := io.writeBackResult.rd
   val readyIn   = io.decodeIssuePort.ready
 
@@ -79,10 +79,11 @@ class DecodeUnit extends Module{
   val stalled   = WireDefault(0.U(1.W))
   val ins       = WireDefault(0.U(32.W))
 
-  decodeIssueBuffer.pc  := pc
+  
   // Storing instruction value in a register
   when(io.fetchIssuePort.valid === 1.U & io.fetchIssuePort.ready === 1.U) {
     decodeIssueBuffer.ins := io.fetchIssuePort.bits.instruction
+    decodeIssueBuffer.pc  := io.fetchIssuePort.bits.PC
   }
 
   ins := Mux(io.fetchIssuePort.valid === 1.U & io.fetchIssuePort.ready === 1.U, io.fetchIssuePort.bits.instruction, decodeIssueBuffer.ins)
@@ -140,7 +141,7 @@ class DecodeUnit extends Module{
   decodeIssueBuffer.opCode := ins(6, 0)
 
   // Register writing
-  when(writeEn === 1.U & validBit(writeRd) === 0.U & writeRd =/= 0.U) {
+  when(writeEn === 1.U & writeRd =/= 0.U) {
     registerFile(writeRd) := writeData
     validBit(writeRd)     := 1.U
   }
@@ -157,11 +158,11 @@ class DecodeUnit extends Module{
   when(insType === rtype.U | insType === utype.U | insType === itype.U | insType === jtype.U) {
     when(validBit(ins(11, 7)) === 0.U) { rdValid := 0.U }
     .otherwise {
-      when(rs1Valid === 1.U & rs2Valid === 1.U & readyIn === 1.U  & ins(11, 7) =/= 0.U) { validBit(ins(11, 7)) := 0.U }
+      when(rs1Valid === 1.U & rs2Valid === 1.U & readyIn === 1.U & validOut === 1.U & ins(11, 7) =/= 0.U) { validBit(ins(11, 7)) := 0.U }
     }
   }
 
-  stalled := ~(rdValid & rs1Valid & rs2Valid)  // stall signal for FSM
+  stalled := ~(rdValid & rs1Valid & rs2Valid)     // stall signal for FSM
 
   // FSM for ready valid interface
   // ------------------------------------------------------------------------------------------------------------------ //
@@ -179,7 +180,7 @@ class DecodeUnit extends Module{
     is(passthroughState) {
       validOut := 1.U
       readyOut := 1.U
-      stateReg := Mux(stalled === 1.U, stallState, Mux(readyIn === 0.U, waitState, Mux(validIn === 1.U, passthroughState, idleState)))
+      stateReg := Mux(readyIn === 0.U, waitState, Mux(validIn === 1.U, Mux(stalled === 1.U, stallState, passthroughState), idleState))
     }
     is(waitState) {
       validOut := 1.U
