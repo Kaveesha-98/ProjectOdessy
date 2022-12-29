@@ -163,7 +163,7 @@ class alu extends aluTemplate {
         ).foldRight((pc + 4.U))(getResult)
 
         result.valid := recievedIns.instruction(6, 0) === BitPat("b110??11") && (
-            decodeIssuePort.valid && stateReg === execBuffIns) 
+            stateReg === execBuffIns || (decodeIssuePort.valid && aluIssuePort.ready && stateReg === passThrough)) 
         result 
     }
 }

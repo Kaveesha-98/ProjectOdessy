@@ -104,7 +104,7 @@ class FetchUnit(val pc_reset_val: Int, val fifo_size: Int) extends Module {
 
   //stall logic
   when (internal_stall === 0.U){
-    internal_stall := branch_detector.io.is_branch
+    internal_stall := branch_detector.io.is_branch & IR_valid
   } .elsewhen (PC_fifo.io.deq.valid === 0.U & PC_valid === 1.U){
     internal_stall := 0.U
   }

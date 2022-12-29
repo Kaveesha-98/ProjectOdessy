@@ -157,7 +157,7 @@ class DecodeUnit extends Module{
   when(insType === rtype.U | insType === utype.U | insType === itype.U | insType === jtype.U) {
     when(validBit(ins(11, 7)) === 0.U) { rdValid := 0.U }
     .otherwise {
-      when(rs1Valid === 1.U & rs2Valid === 1.U & readyIn === 1.U) { validBit(ins(11, 7)) := 0.U }
+      when(rs1Valid === 1.U & rs2Valid === 1.U & readyIn === 1.U  & ins(11, 7) =/= 0.U) { validBit(ins(11, 7)) := 0.U }
     }
   }
 
