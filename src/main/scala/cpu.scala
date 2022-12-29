@@ -82,7 +82,7 @@ class cpuTestbench extends Module {
     val dutcpu = Module(new cpu)
     val mem = SyncReadMem(10240, UInt(8.W))
 
-    val readReq :: writeResp :: Nil = Enum(2)
+    val readReq :: readingMem :: writeResp :: Nil = Enum(3)
     val dataReq = Reg(new Bundle(){
         val address = UInt(64.W)
         val size = UInt(2.W)
@@ -94,10 +94,13 @@ class cpuTestbench extends Module {
             dataReq.address := (dutcpu.dataPort.a.address - "h80000000".U)
             dataReq.size := dutcpu.dataPort.a.size
             dataReq.opcode := dutcpu.dataPort.a.opcode
-            when (dutcpu.dataPort.a.valid.asBool && giveCtrlToCpu) { dataAccessState := writeResp}
+            when (dutcpu.dataPort.a.valid.asBool && giveCtrlToCpu) { dataAccessState := readingMem }
         }
         is(writeResp) {
             when (dutcpu.dataPort.d.ready.asBool && giveCtrlToCpu) { dataAccessState := readReq }
+        }
+        is(readingMem) {
+            dataAccessState := writeResp
         }
     }
 
@@ -132,8 +135,9 @@ class cpuTestbench extends Module {
     when ( instrAccessState === readReq ) { instrReqAddress := dutcpu.instrPort.reqport_addr - "h8000_0000".U}
     dutcpu.instrPort.resport_instr := Cat(Seq.tabulate(4)(i => mem.read(instrReqAddress + i.U)).reverse)
     switch (instrAccessState) {
-        is ( readReq ) { when (dutcpu.instrPort.reqport_valid.asBool && giveCtrlToCpu) { instrAccessState := writeResp} }
+        is ( readReq ) { when (dutcpu.instrPort.reqport_valid.asBool && giveCtrlToCpu) { instrAccessState := readingMem} }
         is ( writeResp) { when (dutcpu.instrPort.resport_ready.asBool && giveCtrlToCpu) { instrAccessState := readReq} }
+        is ( readingMem ) { instrAccessState := writeResp }
     }
 
     val programAddress = RegInit(0.U(64.W))
