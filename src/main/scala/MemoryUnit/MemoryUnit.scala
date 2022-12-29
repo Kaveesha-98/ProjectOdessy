@@ -70,7 +70,7 @@ class MemoryUnit extends Module {
     val loadSign = Mux(recieveBuffer.instruction(14).asBool, 0.U(1.W), (MuxLookup(recieveBuffer.instruction(13,12), justifiedLoadData(63), 
     Seq.tabulate(3)(i => (i.U -> justifiedLoadData(7 + 8*i))))))
     val signExtendedMask = MuxLookup(recieveBuffer.instruction(13, 12), 0.U(64.W), Seq.tabulate(4)(
-        i => (i.U -> Cat(Fill(1 + 8*(3-i), loadSign), Fill(7 + 8*i, "b0".U)))))
+        i => (i.U -> Cat(Fill(1 + 64 - pow(2, (3 + i)).toInt, loadSign), Fill(pow(2, (3 + i)).toInt - 1, "b0".U)))))
     val signExtendedData = justifiedLoadData | signExtendedMask
     
 
