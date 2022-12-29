@@ -43,7 +43,6 @@ class DecodeUnit extends Module{
 
   // Assigning some wires for inputs
   val validIn   = io.fetchIssuePort.valid
-  val pc        = io.fetchIssuePort.bits.PC
   val writeEn   = io.writeBackResult.toRegisterFile
   val writeData = io.writeBackResult.rdData
   val writeRd   = Wire(UInt(1.W))
@@ -79,10 +78,10 @@ class DecodeUnit extends Module{
   val stalled   = WireDefault(0.U(1.W))
   val ins       = WireDefault(0.U(32.W))
 
-  decodeIssueBuffer.pc  := pc
   // Storing instruction value in a register
   when(io.fetchIssuePort.valid === 1.U & io.fetchIssuePort.ready === 1.U) {
     decodeIssueBuffer.ins := io.fetchIssuePort.bits.instruction
+    decodeIssueBuffer.pc  := io.fetchIssuePort.bits.PC
   }
 
   ins := Mux(io.fetchIssuePort.valid === 1.U & io.fetchIssuePort.ready === 1.U, io.fetchIssuePort.bits.instruction, decodeIssueBuffer.ins)
