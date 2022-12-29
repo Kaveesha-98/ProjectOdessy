@@ -116,7 +116,8 @@ class cpuTestbench extends Module {
 
     when (dutcpu.dataPort.a.valid.asBool &&
     dutcpu.dataPort.a.opcode === 1.U &&
-    dataAccessState === readReq && giveCtrlToCpu) {
+    dataAccessState === readReq && giveCtrlToCpu &&
+    (dutcpu.dataPort.a.address =/= (~(0.U(64.W))))) {
 
         Seq.tabulate(8)(i => i).foreach(i => {
             when(dutcpu.dataPort.a.mask(i).asBool) {
@@ -126,7 +127,7 @@ class cpuTestbench extends Module {
     }
 
     storeOut.value := dutcpu.dataPort.a.data(7, 0)
-    storeOut.valid := dutcpu.dataPort.a.valid.asBool
+    storeOut.valid := dutcpu.dataPort.a.valid.asBool && dutcpu.dataPort.a.address === (~(0.U(64.W)))
 
     val instrAccessState = RegInit(readReq)
     dutcpu.instrPort.reqport_ready := (instrAccessState === readReq && giveCtrlToCpu).asUInt
