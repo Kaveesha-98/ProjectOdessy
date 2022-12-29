@@ -45,7 +45,7 @@ class DecodeUnit extends Module{
   val validIn   = io.fetchIssuePort.valid
   val writeEn   = io.writeBackResult.toRegisterFile
   val writeData = io.writeBackResult.rdData
-  val writeRd   = Wire(UInt(1.W))
+  val writeRd   = Wire(UInt(5.W))
   writeRd      := io.writeBackResult.rd
   val readyIn   = io.decodeIssuePort.ready
 
