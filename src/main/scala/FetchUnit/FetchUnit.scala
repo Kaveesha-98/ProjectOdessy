@@ -100,8 +100,11 @@ class FetchUnit(val pc_reset_val: Int, val fifo_size: Int) extends Module {
   }
   io.issueport_instr := IR
   branch_detector.io.instr := IR
-  IR_valid := io.resport_valid & ~internal_stall
-
+  when (IR_valid === 0.U) {
+    IR_valid := (io.resport_ready===1.U & io.resport_valid===1.U & internal_stall===0.U & io.pipelinestalled===0.U).asUInt 
+  }.otherwise {
+    IR_valid := io.pipelinestalled | (io.resport_ready===1.U & io.resport_valid===1.U & internal_stall===0.U & io.pipelinestalled===0.U).asUInt 
+  }
   //stall logic
   when (internal_stall === 0.U){
     internal_stall := branch_detector.io.is_branch & IR_valid
