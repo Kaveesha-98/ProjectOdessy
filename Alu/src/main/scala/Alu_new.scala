@@ -33,7 +33,7 @@ class BranchResult extends Bundle {
   val target    = UInt(64.W)
 }
 
-class Alu extends Module{
+class Alu (val fifo_size: Int) extends Module{
   val io = IO(new Bundle(){
     val decodeIssuePort = Input(new DecodeIssuePort)
     val aluIssuePort    = Output(new AluIssuePort)
@@ -50,6 +50,7 @@ class Alu extends Module{
   val rs2Reg   = RegInit(0.U(64.W))
   val opCodeReg= RegInit(0.U(7.W))
   val funct3Reg = RegInit(0.U(3.W))
+  val funct7Reg = RegInit(0.U(7.W))
 
 val aluResultReg = RegInit(0.U(64.W))
 val nextInstPtrReg = RegInit(0.U(64.W))
@@ -62,41 +63,41 @@ val read_from_fifo = RegInit(false.B)
 
 
 //Initialize FIFOs
-val pc_fifo  = Module(new RegFifo(UInt(64.W), 32))
+val pc_fifo  = Module(new RegFifo(UInt(64.W), fifo_size))
 pc_fifo.io.enq.bits := io.decodeIssuePort.PC
 pc_fifo.io.enq.valid := write_to_fifo
 pc_fifo.io.deq.ready := read_from_fifo
 
-val ins_fifo  = Module(new RegFifo(UInt(32.W), 32))
+val ins_fifo  = Module(new RegFifo(UInt(32.W), fifo_size))
 ins_fifo.io.enq.bits := io.decodeIssuePort.PC
 ins_fifo.io.enq.valid := write_to_fifo
 ins_fifo.io.deq.ready := read_from_fifo
 
-val imm_fifo  = Module(new RegFifo(UInt(64.W), 32))
+val imm_fifo  = Module(new RegFifo(UInt(64.W), fifo_size))
 imm_fifo.io.enq.bits := io.decodeIssuePort.PC
 imm_fifo.io.enq.valid := write_to_fifo
 imm_fifo.io.deq.ready := read_from_fifo
 
-val rs1_fifo  = Module(new RegFifo(UInt(64.W), 32))
+val rs1_fifo  = Module(new RegFifo(UInt(64.W), fifo_size))
 rs1_fifo.io.enq.bits := io.decodeIssuePort.PC
 rs1_fifo.io.enq.valid := write_to_fifo
 rs1_fifo.io.deq.ready := read_from_fifo
 
-val rs2_fifo  = Module(new RegFifo(UInt(64.W), 32))
+val rs2_fifo  = Module(new RegFifo(UInt(64.W), fifo_size))
 rs2_fifo.io.enq.bits := io.decodeIssuePort.PC
 rs2_fifo.io.enq.valid := write_to_fifo
 rs2_fifo.io.deq.ready := read_from_fifo
 
-val opcode_fifo  = Module(new RegFifo(UInt(7.W), 32))
+val opcode_fifo  = Module(new RegFifo(UInt(7.W), fifo_size))
 opcode_fifo.io.enq.bits := io.decodeIssuePort.PC
 opcode_fifo.io.enq.valid := write_to_fifo
 opcode_fifo.io.deq.ready := read_from_fifo
 
 //Combining all deq.valid outputs from FIFOs through an OR gate
-val fifos_empty := RegNext(pc_fifo.io.deq.valid | ins_fifo.io.deq.valid | imm_fifo.io.deq.valid | rs1_fifo.io.deq.valid | rs2_fifo.io.deq.valid | opcode_fifo.io.deq.valid)
+val fifos_empty = RegNext(pc_fifo.io.deq.valid || ins_fifo.io.deq.valid || imm_fifo.io.deq.valid || rs1_fifo.io.deq.valid || rs2_fifo.io.deq.valid || opcode_fifo.io.deq.valid)
 
 //Combining al enq.ready outputs from FIFOs through an OR gate
-val fifos_full := RegNext(pc_fifo.io.enq.ready | ins_fifo.io.enq.ready | imm_fifo.io.enq.ready | rs1_fifo.io.enq.ready | rs2_fifo.io.enq.ready | opcode_fifo.io.enq.ready)
+val fifos_full = RegNext(pc_fifo.io.enq.ready || ins_fifo.io.enq.ready || imm_fifo.io.enq.ready || rs1_fifo.io.enq.ready || rs2_fifo.io.enq.ready || opcode_fifo.io.enq.ready)
 
 //registers with control information
 val exec_ready = RegInit(true.B)
@@ -114,7 +115,7 @@ switch (stateReg){
       when (fifos_empty){  //when FIFO is empty, io.deq.valid is false
         pcReg     := io.decodeIssuePort.PC
         insReg    := io.decodeIssuePort.instruction
-        immReg    := io.decodeIssuePort.imm
+        immReg    := io.decodeIssuePort.immediate
         rs1Reg    := io.decodeIssuePort.rs1
         rs2Reg    := io.decodeIssuePort.rs2
         opCodeReg := io.decodeIssuePort.opCode
@@ -128,7 +129,7 @@ switch (stateReg){
       }
     }.otherwise{
       when (fifos_full){
-        io.UnitStatus.ready := 0.U
+        io.unitStatus.ready := 0.U
         stateReg := execute
       }.otherwise{
         write_to_fifo := true.B
@@ -157,7 +158,7 @@ switch (stateReg){
         branchResultValidReg    := 0.U     
       }
 
-      is(jump.U)   { 
+      is(jal.U)   { 
         aluResultReg            := pcReg + 4.U
         nextInstPtrReg          := pcReg + immReg
         branchResultValidReg    := 1.U
@@ -175,7 +176,7 @@ switch (stateReg){
 
         switch(funct3Reg){
 
-          is (000) {      //BEQ
+          is ("b000".U) {      //BEQ
             when (rs1Reg === rs2Reg){
               nextInstPtrReg := pcReg + immReg
               branchResultTargetReg := pcReg + immReg 
@@ -187,19 +188,19 @@ switch (stateReg){
             branchResultValidReg := 1.U
           }
 
-          is (001) {      //BNE
-            when (rs1Reg != rs2Reg){
-              nextInstPtrReg := pcReg + immReg
-              branchResultTargetReg := pcReg + immReg 
-            }.otherwise{
+          is ("b001".U) {      //BNE
+            when (rs1Reg === rs2Reg){
               nextInstPtrReg := pcReg + 4.U
-              branchResultTargetReg := pcReg + 4.U
+              branchResultTargetReg := pcReg + 4.U 
+            }.otherwise{
+              nextInstPtrReg := pcReg + immReg
+              branchResultTargetReg := pcReg + immReg
             }
             aluResultReg := 0.U
             branchResultValidReg := 1.U
           }            
           
-          is (100) {      //BLT
+          is ("b100".U) {      //BLT
             when (rs1Reg.asSInt < rs2Reg.asSInt){ // this should be signed comparision
               nextInstPtrReg := pcReg + immReg
               branchResultTargetReg := pcReg + immReg 
@@ -211,7 +212,7 @@ switch (stateReg){
             branchResultValidReg := 1.U          
           }
 
-          is (101) {      //BGE
+          is ("b101".U) {      //BGE
             when (rs1Reg.asSInt >= rs2Reg.asSInt){ // this should be a signed comparision
               nextInstPtrReg := pcReg + immReg
               branchResultTargetReg := pcReg + immReg 
@@ -223,8 +224,8 @@ switch (stateReg){
             branchResultValidReg := 1.U                      
           }
 
-          is (110) {      //BLTU
-            when (rs1Reg.U < rs2Reg.U){ // this might throw an error rs*Reg are already UInt
+          is ("b110".U) {      //BLTU
+            when (rs1Reg < rs2Reg){ // this might throw an error rs*Reg are already UInt
               nextInstPtrReg := pcReg + immReg
               branchResultTargetReg := pcReg + immReg 
             }.otherwise{
@@ -235,8 +236,8 @@ switch (stateReg){
             branchResultValidReg := 1.U                      
           }
 
-          is (111) {      //BGEU
-            when (rs1Reg.U >= rs2Reg.U){ // this might throw an error rs*Reg are already UInt
+          is ("b111".U) {      //BGEU
+            when (rs1Reg >= rs2Reg){ // this might throw an error rs*Reg are already UInt
               nextInstPtrReg := pcReg + immReg
               branchResultTargetReg := pcReg + immReg 
             }.otherwise{
@@ -253,15 +254,15 @@ switch (stateReg){
       is (iops.U){
 
         branchResultValidReg := 0.U
-        nextInstPtrReg :- pcReg + 4.U
+        nextInstPtrReg := pcReg + 4.U
 
         switch(funct3Reg){
 
-          is (000) {      //ADDI
+          is ("b000".U) {      //ADDI
             aluResultReg := rs1Reg + immReg
           }
 
-          is (010) {      //SLTI
+          is ("b010".U) {      //SLTI
             when (rs1Reg.asSInt < immReg.asSInt){ // this is a signed comparision
               aluResultReg := 1.U
             }.otherwise {
@@ -269,7 +270,7 @@ switch (stateReg){
             }
           }            
           
-          is (011) {      //SLTIU
+          is ("b011".U) {      //SLTIU
             // same code as above without ".asSInt"
             when (rs1Reg < immReg){ // this is a signed comparision
               aluResultReg := 1.U
@@ -278,24 +279,24 @@ switch (stateReg){
             }            
           }
 
-          is (100) {      //XORI
+          is ("b100".U) {      //XORI
             aluResultReg := rs1Reg ^ immReg
           }
 
-          is (110) {      //ORI
+          is ("b110".U) {      //ORI
             aluResultReg := rs1Reg | immReg
           }
 
-          is (111) {      //ANDI
+          is ("b111".U) {      //ANDI
             aluResultReg := rs1Reg & immReg
           }
 
-          is (001) {      //SLLI
+          is ("b001".U) {      //SLLI
             aluResultReg := rs1Reg << immReg(5,0) // this is the 64 bit version shamt field is 6-bits wide
           }
 
-          is (101) {      //SRLI
-            when (funct7Reg === 0000000) {
+          is ("b101".U) {      //SRLI
+            when (funct7Reg === "b0000000".U) {
               aluResultReg := rs1Reg >> immReg(5, 0)           // this is the 64 bit version shamt field is 6-bits wide   
             }.otherwise{  //SRAI
               aluResultReg := (rs1Reg.asSInt >> immReg(5, 0)).asUInt // for this rs1 is considered to be a signed int
@@ -308,24 +309,24 @@ switch (stateReg){
 
       is (rops.U){
         branchResultValidReg := 0.U
-        nextInstPtrReg :- pcReg + 4.U
+        nextInstPtrReg := pcReg + 4.U
 
         switch (funct3Reg){
-          is (000){
-            when (funct7Reg === 0000000){       //ADD
+          is ("b000".U){
+            when (funct7Reg === "b0000000".U){       //ADD
               aluResultReg := rs1Reg + rs2Reg
             }.otherwise {                       //SUB
               aluResultReg := rs1Reg - rs2Reg     
             }
           }
 
-          is (001){
+          is ("b001".U){
               aluResultReg := rs1Reg << rs2Reg  //SLL - might throw an error
               // if the above line throws an error try - 
               // Mux(rs2(31, 5).orR, 0.U, rs1 << rs2(5, 0)) 
           }
 
-          is (010){     //SLT
+          is ("b010".U){     //SLT
             when (rs1Reg.asSInt < rs2Reg.asSInt){ // this is a signed compare
               aluResultReg := 1.U
             }.otherwise {
@@ -333,7 +334,7 @@ switch (stateReg){
             }
           }
 
-          is (011){         //SLTU   
+          is ("b011".U){         //SLTU   
             when (rs1Reg < rs2Reg){
               aluResultReg := 1.U
             }.otherwise {
@@ -341,23 +342,23 @@ switch (stateReg){
             }
           }  
 
-          is (100){         //XOR
+          is ("b100".U){         //XOR
             aluResultReg := rs1Reg ^ rs2Reg
           }   
 
-          is (101){
-            when (funct7Reg === 0000000){       //SRL
+          is ("b101".U){
+            when (funct7Reg === "b0000000".U){       //SRL
               aluResultReg := rs1Reg >> rs2Reg
             }.otherwise {                       //SRA  
               aluResultReg := rs1Reg.asSInt >> rs2Reg // rs1 is treated as a signed number   
             }
           }
 
-          is (110){     //OR
+          is ("b110".U){     //OR
             aluResultReg := rs1Reg | rs2Reg
           }
 
-          is (111){
+          is ("b111".U){
             aluResultReg := rs1Reg & rs2Reg
           }
         }        
@@ -365,13 +366,13 @@ switch (stateReg){
 
       is (load.U){
         branchResultValidReg := 0.U
-        nextInstPtrReg :- pcReg + 4.U
+        nextInstPtrReg := pcReg + 4.U
         //<add load instruction implementation here>        
       }
 
       is (store.U){
         branchResultValidReg := 0.U
-        nextInstPtrReg :- pcReg + 4.U
+        nextInstPtrReg := pcReg + 4.U
         //<add store instruction implementation here>        
       }
      
@@ -386,7 +387,7 @@ switch (stateReg){
     exec_ready := true.B
     //Connecting ALU registers to the Output port
     io.aluIssuePort.aluResult := aluResultReg
-    io.aluIssuePort.nextInstrPtr := nextInstPtrReg
+    io.aluIssuePort.nextInstPtr := nextInstPtrReg
     io.branchResult.valid := branchResultValidReg
     io.branchResult.target := branchResultTargetReg
 
@@ -394,9 +395,15 @@ switch (stateReg){
 
   }
 }
-  
-
-  
+   
 
 }
+
+/**
+ * An object extending App to generate the Verilog code.
+ */
+object Verilog extends App {
+  (new chisel3.stage.ChiselStage).emitVerilog(new Alu(32))
+}
+
 
