@@ -60,51 +60,58 @@ val branchResultTargetReg = RegInit(0.U(64.W))
 val write_to_fifo = RegInit(false.B)
 val read_from_fifo = RegInit(false.B)
 
-//Initialize FIFOs
-val PC_fifo  = Module(new RegFifo(UInt(64.W), fifo_size))
-PC_fifo.io.enq.bits := io.decodeIssuePort.PC
-PC_fifo.io.enq.valid := read_to_fifo
-PC_fifo.io.deq.ready := read_from_fifo
 
-val ins_fifo  = Module(new RegFifo(UInt(32.W), fifo_size))
+//Initialize FIFOs
+val pc_fifo  = Module(new RegFifo(UInt(64.W), 32))
+pc_fifo.io.enq.bits := io.decodeIssuePort.PC
+pc_fifo.io.enq.valid := write_to_fifo
+pc_fifo.io.deq.ready := read_from_fifo
+
+val ins_fifo  = Module(new RegFifo(UInt(32.W), 32))
 ins_fifo.io.enq.bits := io.decodeIssuePort.PC
-ins_fifo.io.enq.valid := read_to_fifo
+ins_fifo.io.enq.valid := write_to_fifo
 ins_fifo.io.deq.ready := read_from_fifo
 
-val imm_fifo  = Module(new RegFifo(UInt(64.W), fifo_size))
+val imm_fifo  = Module(new RegFifo(UInt(64.W), 32))
 imm_fifo.io.enq.bits := io.decodeIssuePort.PC
-imm_fifo.io.enq.valid := read_to_fifo
+imm_fifo.io.enq.valid := write_to_fifo
 imm_fifo.io.deq.ready := read_from_fifo
 
-val rs1_fifo  = Module(new RegFifo(UInt(64.W), fifo_size))
+val rs1_fifo  = Module(new RegFifo(UInt(64.W), 32))
 rs1_fifo.io.enq.bits := io.decodeIssuePort.PC
-rs1_fifo.io.enq.valid := read_to_fifo
+rs1_fifo.io.enq.valid := write_to_fifo
 rs1_fifo.io.deq.ready := read_from_fifo
 
-val rs2_fifo  = Module(new RegFifo(UInt(64.W), fifo_size))
+val rs2_fifo  = Module(new RegFifo(UInt(64.W), 32))
 rs2_fifo.io.enq.bits := io.decodeIssuePort.PC
-rs2_fifo.io.enq.valid := read_to_fifo
+rs2_fifo.io.enq.valid := write_to_fifo
 rs2_fifo.io.deq.ready := read_from_fifo
 
-val opcode_fifo  = Module(new RegFifo(UInt(7.W), fifo_size))
+val opcode_fifo  = Module(new RegFifo(UInt(7.W), 32))
 opcode_fifo.io.enq.bits := io.decodeIssuePort.PC
-opcode_fifo.io.enq.valid := read_to_fifo
+opcode_fifo.io.enq.valid := write_to_fifo
 opcode_fifo.io.deq.ready := read_from_fifo
 
+//Combining all deq.valid outputs from FIFOs through an OR gate
+val fifos_empty := RegNext(pc_fifo.io.deq.valid | ins_fifo.io.deq.valid | imm_fifo.io.deq.valid | rs1_fifo.io.deq.valid | rs2_fifo.io.deq.valid | opcode_fifo.io.deq.valid)
 
+//Combining al enq.ready outputs from FIFOs through an OR gate
+val fifos_full := RegNext(pc_fifo.io.enq.ready | ins_fifo.io.enq.ready | imm_fifo.io.enq.ready | rs1_fifo.io.enq.ready | rs2_fifo.io.enq.ready | opcode_fifo.io.enq.ready)
 
+//registers with control information
+val exec_ready = RegInit(true.B)
   
 //Defining the 03 states of the ALU
-val READ :: EXEC :: WRITE :: Nil = Enum(3)
+val load_values :: execute :: write_to_output :: Nil = Enum(3)
 
 //The state register
-val stateReg = RegInit(READ)
+val stateReg = RegInit(load_values)
 
 //state change logic
 switch (stateReg){
-  is (READ){
+  is (load_values){
     when (exec_ready){
-      when (FIFO_empty){
+      when (fifos_empty){  //when FIFO is empty, io.deq.valid is false
         pcReg     := io.decodeIssuePort.PC
         insReg    := io.decodeIssuePort.instruction
         immReg    := io.decodeIssuePort.imm
@@ -113,27 +120,27 @@ switch (stateReg){
         opCodeReg := io.decodeIssuePort.opCode
         funct3Reg := io.decodeIssuePort.instruction(14,12)
         funct7Reg := io.decodeIssuePort.instruction(31,25)
-        stateReg:= EXEC
+        stateReg:= execute
       } .otherwise{
         read_from_fifo := true.B
 
-        stateReg:= EXEC
+        stateReg:= execute
       }
     }.otherwise{
-      when (FIFO_full){
+      when (fifos_full){
         io.UnitStatus.ready := 0.U
-        stateReg := EXEC
+        stateReg := execute
       }.otherwise{
         write_to_fifo := true.B
 
-        stateReg:= EXEC
+        stateReg:= execute
       }
       
     }
   }
 
-  is (EXEC){
-    exec_ready := 0.U
+  is (execute){
+    exec_ready := false.B
 
     //Execution of instructions 
     switch (opCodeReg){
@@ -372,18 +379,18 @@ switch (stateReg){
 
     }
 
-    stateReg := WRITE
+    stateReg := write_to_output
   }
 
-  is (WRITE){
-    exec_ready := 1.U
+  is (write_to_output){
+    exec_ready := true.B
     //Connecting ALU registers to the Output port
     io.aluIssuePort.aluResult := aluResultReg
     io.aluIssuePort.nextInstrPtr := nextInstPtrReg
     io.branchResult.valid := branchResultValidReg
     io.branchResult.target := branchResultTargetReg
 
-    stateReg := READ
+    stateReg := load_values
 
   }
 }
