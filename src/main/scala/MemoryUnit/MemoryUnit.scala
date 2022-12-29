@@ -41,16 +41,16 @@ class MemoryUnit extends Module {
           * Setting registers to send request
           * Unaligned accesses are not supported in hardware
           */
-        dataPort.a.opcode := Mux(aluIssuePort.bits.instruction(5).asBool, 1.U, 4.U)
-        dataPort.a.param := 0.U
-        dataPort.a.size := aluIssuePort.bits.instruction(13, 12)
-        dataPort.a.source := 0.U
-        dataPort.a.address := aluIssuePort.bits.aluResult
+        a_bits.opcode := Mux(aluIssuePort.bits.instruction(5).asBool, 1.U, 4.U)
+        a_bits.param := 0.U
+        a_bits.size := aluIssuePort.bits.instruction(13, 12)
+        a_bits.source := 0.U
+        a_bits.address := aluIssuePort.bits.aluResult
         val unalignedMask = MuxLookup(aluIssuePort.bits.instruction(13, 12), 127.U(8.W), Seq.tabulate(3)(i => (i.U -> ((1 << (1 << i))-1).U)))
-        dataPort.a.mask := unalignedMask << aluIssuePort.bits.aluResult(3, 0)
-        dataPort.a.data := MuxLookup(aluIssuePort.bits.aluResult(3, 0), aluIssuePort.bits.rs2, Seq.tabulate(8)(
+        a_bits.mask := unalignedMask << aluIssuePort.bits.aluResult(3, 0)
+        a_bits.data := MuxLookup(aluIssuePort.bits.aluResult(3, 0), aluIssuePort.bits.rs2, Seq.tabulate(8)(
             i => (i.U -> (aluIssuePort.bits.rs2 << (8*i)))))
-        dataPort.a.valid := 1.U
+        a_bits.valid := 1.U
     }
 
     when (stateReg === waitOnMemReq && dataPort.a.ready.asBool) {
