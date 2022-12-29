@@ -91,7 +91,7 @@ class cpuTestbench extends Module {
     val dataAccessState = RegInit(readReq)
     switch(dataAccessState) {
         is(readReq) {
-            dataReq.address := (dutcpu.dataPort.a.address - "h80000000".U)
+            dataReq.address := Cat((dutcpu.dataPort.a.address - "h80000000".U)(63, 3), 0.U(3.W))
             dataReq.size := dutcpu.dataPort.a.size
             dataReq.opcode := dutcpu.dataPort.a.opcode
             when (dutcpu.dataPort.a.valid.asBool && giveCtrlToCpu) { dataAccessState := readingMem }
@@ -111,7 +111,7 @@ class cpuTestbench extends Module {
     dutcpu.dataPort.d.size := dataReq.size
     dutcpu.dataPort.d.source := 0.U
     dutcpu.dataPort.d.sink := 0.U
-    dutcpu.dataPort.d.data := Cat(Seq.tabulate(8)(i => mem.read((dataReq.address&(~7.U)) + i.U)).reverse)
+    dutcpu.dataPort.d.data := Cat(Seq.tabulate(8)(i => mem.read(dataReq.address + i.U)).reverse)
     dutcpu.dataPort.d.error := 0.U
 
     when (dutcpu.dataPort.a.valid.asBool &&
