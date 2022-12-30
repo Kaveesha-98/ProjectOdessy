@@ -46,9 +46,9 @@ class MemoryUnit extends Module {
         a_bits.size := aluIssuePort.bits.instruction(13, 12)
         a_bits.source := 0.U
         a_bits.address := aluIssuePort.bits.aluResult
-        val unalignedMask = MuxLookup(aluIssuePort.bits.instruction(13, 12), 127.U(8.W), Seq.tabulate(3)(i => (i.U -> ((1 << (1 << i))-1).U)))
-        a_bits.mask := unalignedMask << aluIssuePort.bits.aluResult(3, 0)
-        a_bits.data := MuxLookup(aluIssuePort.bits.aluResult(3, 0), aluIssuePort.bits.rs2, Seq.tabulate(8)(
+        val unalignedMask = MuxLookup(aluIssuePort.bits.instruction(13, 12), 255.U(8.W), Seq.tabulate(3)(i => (i.U -> ((1 << (1 << i))-1).U)))
+        a_bits.mask := unalignedMask << aluIssuePort.bits.aluResult(2, 0)
+        a_bits.data := MuxLookup(aluIssuePort.bits.aluResult(2, 0), aluIssuePort.bits.rs2, Seq.tabulate(8)(
             i => (i.U -> (aluIssuePort.bits.rs2 << (8*i)))))
         a_bits.valid := 1.U
     }
@@ -65,14 +65,19 @@ class MemoryUnit extends Module {
     memoryIssuePort.bits := memIssueBuffer
     memoryIssuePort.valid := memIssueValid
 
-    val justifiedLoadData = MuxLookup(recieveBuffer.aluResult(3, 0), dataPort.d.data, Seq.tabulate(8)(
+    val justifiedLoadData = MuxLookup(recieveBuffer.aluResult(2, 0), dataPort.d.data, Seq.tabulate(8)(
         i => (i.U -> (dataPort.d.data >> (8*i)))))
-    val loadSign = Mux(recieveBuffer.instruction(14).asBool, 0.U(1.W), (MuxLookup(recieveBuffer.instruction(13,12), justifiedLoadData(63), 
-    Seq.tabulate(3)(i => (i.U -> justifiedLoadData(7 + 8*i))))))
-    val signExtendedMask = MuxLookup(recieveBuffer.instruction(13, 12), 0.U(64.W), Seq.tabulate(4)(
-        i => (i.U -> Cat(Fill(1 + 64 - pow(2, (3 + i)).toInt, loadSign), Fill(pow(2, (3 + i)).toInt - 1, "b0".U)))))
-    val signExtendedData = justifiedLoadData | signExtendedMask
-    
+    val signExtendedData = MuxLookup(recieveBuffer.instruction(13,12), justifiedLoadData, Seq(
+        0.U -> Cat(Fill(56, justifiedLoadData(7)), justifiedLoadData(7, 0)),
+        1.U -> Cat(Fill(48, justifiedLoadData(15)), justifiedLoadData(15, 0)),
+        2.U -> Cat(Fill(32, justifiedLoadData(31)), justifiedLoadData(31, 0))
+    ))
+    val unsignExtendedData = MuxLookup(recieveBuffer.instruction(13,12), justifiedLoadData, Seq(
+        0.U -> Cat(0.U(56.W), justifiedLoadData(7, 0)),
+        1.U -> Cat(0.U(48.W), justifiedLoadData(15, 0)),
+        2.U -> Cat(0.U(32.W), justifiedLoadData(31, 0))
+    ))
+    val dataWrtieBack = Mux(recieveBuffer.instruction(14).asBool, unsignExtendedData, signExtendedData)
 
     when (stateReg === passThrough) {
         when (memoryIssuePort.ready && aluIssuePort.bits.instruction =/= BitPat("b0?00011")) {
@@ -96,10 +101,10 @@ class MemoryUnit extends Module {
         when (memoryIssuePort.ready) {
             memIssueBuffer.instruction := recieveBuffer.instruction
             memIssueBuffer.nextInstPtr := recieveBuffer.nextInstPtr
-            memIssueBuffer.aluResult := signExtendedData
+            memIssueBuffer.aluResult := dataWrtieBack
             memIssueValid := true.B
         }.otherwise {
-            recieveBuffer.aluResult := signExtendedData
+            recieveBuffer.aluResult := dataWrtieBack
         }
     }.elsewhen (memoryIssuePort.ready) {
         /**
