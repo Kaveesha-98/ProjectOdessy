@@ -121,12 +121,12 @@ class cpuTestbench extends Module {
 
         Seq.tabulate(8)(i => i).foreach(i => {
             when(dutcpu.dataPort.a.mask(i).asBool) {
-                mem.write((dutcpu.dataPort.a.address&(~7.U)) + i.U, dutcpu.dataPort.a.data(8*(i+1) - 1, 8*i))
+                mem.write(Cat((dutcpu.dataPort.a.address - "h80000000".U)(63, 3), 0.U(3.W)) + i.U, dutcpu.dataPort.a.data(8*(i+1) - 1, 8*i))
             }
         })
     }
 
-    storeOut.value := dutcpu.dataPort.a.data(7, 0)
+    storeOut.value := dutcpu.dataPort.a.data(63, 56)
     storeOut.valid := dutcpu.dataPort.a.valid.asBool && dutcpu.dataPort.a.address === (~(0.U(64.W)))
 
     val instrAccessState = RegInit(readReq)
