@@ -1,37 +1,14 @@
 package pipeline.decode
 
 import Constants._
-
 import chisel3._
 import chisel3.util._
+import pipeline.ports.{DecodeIssuePort, FetchIssuePort, WriteBackResult}
 
 class handshake[T <: Data](gen: T) extends Bundle {
   val ready = Output(UInt(1.W))
   val valid = Input(UInt(1.W))
   val bits  = Input(gen)
-}
-
-// Inputs from Fetch unit
-class FetchIssuePort extends Bundle {
-  val instruction = UInt(32.W)
-  val PC          = UInt(64.W)
-}
-
-// Outputs for ALU
-class DecodeIssuePort extends Bundle {
-  val instruction = UInt(32.W)
-  val PC          = UInt(64.W)
-  val opCode      = UInt(7.W)
-  val rs1         = UInt(64.W)
-  val rs2         = UInt(64.W)
-  val immediate   = UInt(64.W)
-}
-
-// Inputs for Register file
-class WriteBackResult extends Bundle {
-  val toRegisterFile = UInt(1.W)
-  val rd             = UInt(5.W)
-  val rdData         = UInt(64.W)
 }
 
 class DecodeUnit extends Module{
@@ -51,23 +28,7 @@ class DecodeUnit extends Module{
   val readyIn   = io.decodeIssuePort.ready
 
   // Initializing some registers for outputs
-  val decodeIssueBuffer = RegInit({
-    val initialState = Wire(new Bundle() {
-      val pc = UInt(64.W)
-      val ins = UInt(32.W)
-      val opCode = UInt(7.W)
-      val imm = UInt(64.W)
-      val rs1 = UInt(64.W)
-      val rs2 = UInt(64.W)
-    })
-    initialState.pc := 0.U
-    initialState.ins := 0.U
-    initialState.opCode := 0.U
-    initialState.imm := 0.U
-    initialState.rs1 := 0.U
-    initialState.rs2 := 0.U
-    initialState
-  })
+  val decodeIssueBuffer = Reg(new DecodeIssuePort)
 
   // Initializing some intermediate wires
   val validOut  = WireDefault(0.U(1.W))
@@ -82,21 +43,16 @@ class DecodeUnit extends Module{
   
   // Storing instruction value in a register
   when(io.fetchIssuePort.valid === 1.U & io.fetchIssuePort.ready === 1.U) {
-    decodeIssueBuffer.ins := io.fetchIssuePort.bits.instruction
-    decodeIssueBuffer.pc  := io.fetchIssuePort.bits.PC
+    decodeIssueBuffer.instruction := io.fetchIssuePort.bits.instruction
+    decodeIssueBuffer.PC          := io.fetchIssuePort.bits.PC
   }
 
-  ins := Mux(io.fetchIssuePort.valid === 1.U & io.fetchIssuePort.ready === 1.U, io.fetchIssuePort.bits.instruction, decodeIssueBuffer.ins)
+  ins := Mux(io.fetchIssuePort.valid === 1.U & io.fetchIssuePort.ready === 1.U, io.fetchIssuePort.bits.instruction, decodeIssueBuffer.instruction)
 
   // Assigning outputs
-  io.decodeIssuePort.bits.PC          := decodeIssueBuffer.pc
-  io.decodeIssuePort.bits.instruction := decodeIssueBuffer.ins
-  io.decodeIssuePort.bits.opCode      := decodeIssueBuffer.opCode
-  io.decodeIssuePort.bits.immediate   := decodeIssueBuffer.imm
-  io.decodeIssuePort.valid            := validOut
-  io.decodeIssuePort.bits.rs1         := decodeIssueBuffer.rs1
-  io.decodeIssuePort.bits.rs2         := decodeIssueBuffer.rs2
-  io.fetchIssuePort.ready             := readyOut
+  io.decodeIssuePort.valid := validOut
+  io.fetchIssuePort.ready  := readyOut
+  io.decodeIssuePort.bits  := decodeIssueBuffer
 
   // Deciding the instruction type
   switch (ins(6,0)) {
@@ -118,13 +74,13 @@ class DecodeUnit extends Module{
 
   // Calculating the immediate value
   switch (insType) {
-    is(itype.U) { decodeIssueBuffer.imm := Cat(Fill(53, ins(31)), ins(30, 20)) }
-    is(stype.U) { decodeIssueBuffer.imm := Cat(Fill(53, ins(31)), ins(30,25), ins(11, 7)) }
-    is(btype.U) { decodeIssueBuffer.imm := Cat(Fill(53, ins(31)), ins(7), ins(30,25), ins(11,8), 0.U(1.W)) }
-    is(utype.U) { decodeIssueBuffer.imm := Cat(Fill(32, ins(31)), ins(31,12), 0.U(12.W)) }
-    is(jtype.U) { decodeIssueBuffer.imm := Cat(Fill(44, ins(31)), ins(19,12), ins(20), ins(30,25), ins(24,21), 0.U(1.W)) }
-    is(ntype.U) { decodeIssueBuffer.imm := Fill(64, 0.U) }
-    is(rtype.U) { decodeIssueBuffer.imm := Fill(64, 0.U) }
+    is(itype.U) { decodeIssueBuffer.immediate := Cat(Fill(53, ins(31)), ins(30, 20)) }
+    is(stype.U) { decodeIssueBuffer.immediate := Cat(Fill(53, ins(31)), ins(30,25), ins(11, 7)) }
+    is(btype.U) { decodeIssueBuffer.immediate := Cat(Fill(53, ins(31)), ins(7), ins(30,25), ins(11,8), 0.U(1.W)) }
+    is(utype.U) { decodeIssueBuffer.immediate := Cat(Fill(32, ins(31)), ins(31,12), 0.U(12.W)) }
+    is(jtype.U) { decodeIssueBuffer.immediate := Cat(Fill(44, ins(31)), ins(19,12), ins(20), ins(30,25), ins(24,21), 0.U(1.W)) }
+    is(ntype.U) { decodeIssueBuffer.immediate := Fill(64, 0.U) }
+    is(rtype.U) { decodeIssueBuffer.immediate := Fill(64, 0.U) }
   }
 
   // Valid bits for each register
