@@ -24,23 +24,34 @@ class AluIssuePort extends Bundle {
 }
 
 class DecodeIssuePort extends Bundle {
-    val instruction = UInt(32.W)
-    val PC = UInt(64.W)
-    val opCode = UInt(7.W)
-    val rs1 = UInt(64.W)
-    val rs2 = UInt(64.W)
-    val immediate = UInt(64.W)
+    val instruction     = UInt(32.W)
+    val PC              = UInt(64.W)
+    val opCode          = UInt(7.W)
+    val rs1             = UInt(64.W)
+    val rs2             = UInt(64.W)
+    val immediate       = UInt(64.W)
+    val predictedTaken  = Bool()
 }
 
 class FetchIssuePort extends Bundle {
-    val instruction = UInt(32.W)
-    val PC = UInt(32.W)
+    val instruction     = UInt(32.W)
+    val PC              = UInt(64.W)
+    val predictedTaken  = Bool()
 }
 
 class WriteBackResult extends Bundle {
     val toRegisterFile = UInt(1.W)
     val rd             = UInt(5.W)
     val rdData         = UInt(64.W)
+}
+
+class branchResults extends Bundle {
+    val valid       = Bool()
+    val nextInstPtr = UInt(64.W)
+    val PC          = UInt(64.W)
+    val predicted   = Bool()
+    val isBranch    = Bool() // to account for branches being overwritten with non branched
+    val branchTaken = Bool()
 }
 
 class test extends Module {
