@@ -40,7 +40,12 @@ abstract class aluTemplate extends Module {
     val issuePortBits = Reg(new AluIssuePort())
     when(stateReg =/= waitOnMem) {
         issuePortBits := getsWriteBack(Mux(stateReg === passThrough, decodeIssuePort.bits, bufferdInstruction))
-        branchResultDriver := resolveBranch(Mux(stateReg === passThrough, decodeIssuePort.bits, bufferdInstruction))
+        //branchResultDriver := resolveBranch(Mux(stateReg === passThrough, decodeIssuePort.bits, bufferdInstruction))
+    }
+    when(stateReg === passThrough) {
+        branchResultDriver := resolveBranch(decodeIssuePort.bits)
+    }.otherwise {
+        branchResultDriver.valid := false.B
     }
 
     val aluIssueValid = RegInit(false.B)
@@ -162,8 +167,7 @@ class alu extends aluTemplate {
             BitPat("b?????????????????????????1100011") -> brachNextAddress, // branches
         ).foldRight((pc + 4.U))(getResult)
 
-        result.valid := recievedIns.instruction(6, 0) === BitPat("b110??11") && (
-            stateReg === execBuffIns || (decodeIssuePort.valid && aluIssuePort.ready && stateReg === passThrough)) 
+        result.valid := recievedIns.instruction(6, 0) === BitPat("b110??11")
         result 
     }
 }
