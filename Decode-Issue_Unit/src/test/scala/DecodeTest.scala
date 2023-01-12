@@ -48,7 +48,7 @@ class DecodeTest extends AnyFlatSpec with ChiselScalatestTester {
       dut.io.writeBackResult.rdData.poke(1500.U)
       dut.io.writeBackResult.toRegisterFile.poke(0.U)
       dut.io.decodeIssuePort.ready.poke(1.U)
-      dut.io.branchMisspredict.poke(true.B)
+      dut.io.branchMisspredict.poke(false.B)
 
       dut.clock.step(1)
       step = step + 1
@@ -64,12 +64,12 @@ class DecodeTest extends AnyFlatSpec with ChiselScalatestTester {
       println("-------------------------------------------------------------")
 
       dut.io.fetchIssuePort.valid.poke(1.U)
-      dut.io.fetchIssuePort.bits.PC.poke(2.U)
+      dut.io.fetchIssuePort.bits.PC.poke(3.U)
       dut.io.fetchIssuePort.bits.instruction.poke("b01111101000000001000000100010011".U) // addi x2, x1, 2000
       dut.io.writeBackResult.rd.poke(1.U)
       dut.io.writeBackResult.rdData.poke(1050.U)
       dut.io.writeBackResult.toRegisterFile.poke(0.U)
-      dut.io.decodeIssuePort.ready.poke(1.U)
+      dut.io.decodeIssuePort.ready.poke(0.U)
       dut.io.branchMisspredict.poke(true.B)
 
       dut.clock.step(1)
@@ -91,7 +91,7 @@ class DecodeTest extends AnyFlatSpec with ChiselScalatestTester {
       dut.io.writeBackResult.rd.poke(5.U)
       dut.io.writeBackResult.rdData.poke(1250.U)
       dut.io.writeBackResult.toRegisterFile.poke(0.U)
-      dut.io.decodeIssuePort.ready.poke(0.U)
+      dut.io.decodeIssuePort.ready.poke(1.U)
       dut.io.branchMisspredict.poke(false.B)
 
       dut.clock.step(1)
