@@ -55,6 +55,7 @@ class cpu extends Module {
     decode.io.writeBackResult.toRegisterFile := memoryAccess.memoryIssuePort.valid && !(
         memoryAccess.memoryIssuePort.bits.instruction(6, 0) === BitPat("b?100011") // excluding stores and conditional branches
     )
+    decode.io.branchMisspredict := 0.B
 
     alu.aluIssuePort <> memoryAccess.aluIssuePort
 
