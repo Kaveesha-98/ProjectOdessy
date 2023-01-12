@@ -16,7 +16,10 @@ class DecodeUnit extends Module{
     val fetchIssuePort  = new handshake(new FetchIssuePort)
     val decodeIssuePort = Flipped(new handshake(new DecodeIssuePort))
     val writeBackResult = Input(new WriteBackResult)
+    val branchMisspredict = Input(Bool())
   })
+
+  val rdBuffer = RegInit(0.U(5.W))
 
   // Assigning some wires for inputs
   val validIn   = io.fetchIssuePort.valid
@@ -48,6 +51,8 @@ class DecodeUnit extends Module{
   }
 
   ins := Mux(io.fetchIssuePort.valid === 1.U & io.fetchIssuePort.ready === 1.U, io.fetchIssuePort.bits.instruction, decodeIssueBuffer.instruction)
+
+  rdBuffer := ins(11, 7)
 
   // Assigning outputs
   io.decodeIssuePort.valid := validOut
@@ -104,18 +109,22 @@ class DecodeUnit extends Module{
 
   // Checking rs1 validity
   when(insType === rtype.U | insType === itype.U | insType === stype.U | insType === btype.U) {
-    when(validBit(ins(19, 15)) === 0.U) { rs1Valid := 0.U }
+    when(validBit(ins(19, 15)) === 0.U & ~(io.branchMisspredict & ins(19, 15) === rdBuffer)) { rs1Valid := 0.U }
   }
   // Checking rs2 validity
   when(insType === rtype.U | insType === stype.U | insType === btype.U) {
-    when(validBit(ins(24, 20)) === 0.U) { rs2Valid := 0.U }
+    when(validBit(ins(24, 20)) === 0.U & ~(io.branchMisspredict & ins(24, 20) === rdBuffer)) { rs2Valid := 0.U }
   }
   // Checking rd validity and changing the valid bit for rd
   when(insType === rtype.U | insType === utype.U | insType === itype.U | insType === jtype.U) {
-    when(validBit(ins(11, 7)) === 0.U) { rdValid := 0.U }
+    when(validBit(ins(11, 7) ) === 0.U & ~(io.branchMisspredict & ins(11, 7) === rdBuffer)) { rdValid := 0.U }
     .otherwise {
       when(rs1Valid === 1.U & rs2Valid === 1.U & readyIn === 1.U & validOut === 1.U & ins(11, 7) =/= 0.U) { validBit(ins(11, 7)) := 0.U }
     }
+  }
+
+  when(io.branchMisspredict & ins(11, 7) =/= rdBuffer) {
+    validBit(rdBuffer) := 1.U
   }
 
   stalled := ~(rdValid & rs1Valid & rs2Valid)     // stall signal for FSM
