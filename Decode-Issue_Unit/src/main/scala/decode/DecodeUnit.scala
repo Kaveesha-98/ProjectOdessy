@@ -43,6 +43,7 @@ class DecodeUnit extends Module{
   })
 
   val rdBuffer = RegInit(0.U(5.W))
+  val prevRdBuffer = RegInit(0.U(5.W))
 
   // Assigning some wires for inputs
   val validIn   = io.fetchIssuePort.valid
@@ -90,6 +91,7 @@ class DecodeUnit extends Module{
   ins := Mux(io.fetchIssuePort.valid === 1.U & io.fetchIssuePort.ready === 1.U, io.fetchIssuePort.bits.instruction, decodeIssueBuffer.ins)
 
   rdBuffer := ins(11, 7)
+  prevRdBuffer := rdBuffer
 
   // Assigning outputs
   io.decodeIssuePort.bits.PC          := decodeIssueBuffer.pc
@@ -161,12 +163,12 @@ class DecodeUnit extends Module{
   when(insType === rtype.U | insType === utype.U | insType === itype.U | insType === jtype.U) {
     when(validBit(ins(11, 7)) === 0.U & ~(io.branchMisspredict & ins(11, 7) === rdBuffer)) { rdValid := 0.U }
     .otherwise {
-      when(rs1Valid === 1.U & rs2Valid === 1.U & readyIn === 1.U & validOut === 1.U & ins(11, 7) =/= 0.U) { validBit(ins(11, 7)) := 0.U }
+      when(readyIn === 1.U & validOut === 1.U & decodeIssueBuffer.ins(11, 7) =/= 0.U) { validBit(decodeIssueBuffer.ins(11, 7)) := 0.U }
     }
   }
 
-  when(io.branchMisspredict & ins(11, 7) =/= rdBuffer) {
-    validBit(rdBuffer) := 1.U
+  when(io.branchMisspredict) {
+    validBit(prevRdBuffer) := 1.U
   }
 
   stalled := ~(rdValid & rs1Valid & rs2Valid)     // stall signal for FSM
@@ -180,27 +182,43 @@ class DecodeUnit extends Module{
     is(idleState) {
       validOut := 0.U
       readyOut := 1.U
-      when(validIn === 1.U) {
-        stateReg := Mux(stalled === 1.U, stallState, Mux(readyIn === 1.U, passthroughState, waitState))
+      when(io.branchMisspredict) {
+        stateReg := idleState
+      } otherwise {
+        when(validIn === 1.U) {
+          stateReg := Mux(stalled === 1.U, stallState, Mux(readyIn === 1.U, passthroughState, waitState))
+        }
       }
     }
     is(passthroughState) {
       validOut := 1.U
       readyOut := 1.U
-      stateReg := Mux(readyIn === 0.U, waitState, Mux(validIn === 1.U, Mux(stalled === 1.U, stallState, passthroughState), idleState))
+      when(io.branchMisspredict) {
+        stateReg := idleState
+      } otherwise {
+        stateReg := Mux(readyIn === 0.U, waitState, Mux(validIn === 1.U, Mux(stalled === 1.U, stallState, passthroughState), idleState))
+      }
     }
     is(waitState) {
       validOut := 1.U
       readyOut := 0.U
-      when(readyIn === 1.U) {
-        stateReg := Mux(validIn === 1.U, passthroughState, idleState)
+      when(io.branchMisspredict) {
+        stateReg := idleState
+      } otherwise {
+        when(readyIn === 1.U) {
+          stateReg := Mux(validIn === 1.U, passthroughState, idleState)
+        }
       }
     }
     is(stallState) {
       validOut := 0.U
       readyOut := 0.U
-      when(stalled === 0.U) {
-        stateReg := Mux(readyIn === 1.U, passthroughState, waitState)
+      when(io.branchMisspredict) {
+        stateReg := idleState
+      } otherwise {
+        when(stalled === 0.U) {
+          stateReg := Mux(readyIn === 1.U, passthroughState, waitState)
+        }
       }
     }
   }
