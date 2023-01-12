@@ -155,11 +155,11 @@ class DecodeUnit extends Module{
   }
   // Checking rs2 validity
   when(insType === rtype.U | insType === stype.U | insType === btype.U) {
-    when(validBit(ins(24, 20)) === 0.U & ~(io.branchMisspredict & ins(19, 15) === rdBuffer)) { rs2Valid := 0.U }
+    when(validBit(ins(24, 20)) === 0.U & ~(io.branchMisspredict & ins(24, 20) === rdBuffer)) { rs2Valid := 0.U }
   }
   // Checking rd validity and changing the valid bit for rd
   when(insType === rtype.U | insType === utype.U | insType === itype.U | insType === jtype.U) {
-    when(validBit(ins(11, 7)) === 0.U & ~(io.branchMisspredict & ins(19, 15) === rdBuffer)) { rdValid := 0.U }
+    when(validBit(ins(11, 7)) === 0.U & ~(io.branchMisspredict & ins(11, 7) === rdBuffer)) { rdValid := 0.U }
     .otherwise {
       when(rs1Valid === 1.U & rs2Valid === 1.U & readyIn === 1.U & validOut === 1.U & ins(11, 7) =/= 0.U) { validBit(ins(11, 7)) := 0.U }
     }
