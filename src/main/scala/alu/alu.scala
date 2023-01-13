@@ -31,17 +31,29 @@ abstract class aluTemplate extends Module {
     val passThrough :: waitOnMem :: execBuffIns :: Nil = Enum(3)
     val stateReg = RegInit(passThrough)
 
+    /**
+      * If memory unit is not ready, then the instruction accepted in this
+      * cycle must be buffered.
+      */
     val bufferdInstruction = Reg(new DecodeIssuePort())
     when(stateReg === passThrough && !aluIssuePort.ready){
         bufferdInstruction := decodeIssuePort.bits
     }
 
-    val branchResultDriver = RegInit((new BranchResult).Lit(_.target -> 0.U, _.valid -> false.B))
+    /**
+      * Instruction is passed through either the buffered instruction(priority)
+      * or the instruction on the docodeIssuePort
+      */
     val issuePortBits = Reg(new AluIssuePort())
     when(stateReg =/= waitOnMem) {
-        issuePortBits := getsWriteBack(Mux(stateReg === passThrough, decodeIssuePort.bits, bufferdInstruction))
-        //branchResultDriver := resolveBranch(Mux(stateReg === passThrough, decodeIssuePort.bits, bufferdInstruction))
+        issuePortBits := getsWriteBack(Mux(stateReg === passThrough, decodeIssuePort.bits, bufferdInstruction))\
     }
+
+    /**
+      * Branch results are broadcasted in the next
+      * cycle to the decode and fetch units
+      */
+    val branchResultDriver = RegInit((new BranchResult).Lit(_.target -> 0.U, _.valid -> false.B))
     when(stateReg === passThrough) {
         branchResultDriver := resolveBranch(decodeIssuePort.bits)
     }.otherwise {
