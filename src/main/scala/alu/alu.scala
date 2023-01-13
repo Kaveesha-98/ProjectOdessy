@@ -63,7 +63,7 @@ abstract class aluTemplate extends Module {
 
     switch(stateReg) {
         is(passThrough) { 
-            when(decodeIssuePort.valid && !branchResolvedResults.predicted) { stateReg := flush } 
+            when(decodeIssuePort.valid && !branchResolvedResults.predicted && aluIssuePort.ready) { stateReg := flush } 
             .elsewhen(decodeIssuePort.valid && !aluIssuePort.ready) { stateReg := waitOnMem }
         }
         is(waitOnMem)   { when(aluIssuePort.ready){ stateReg := execBuffIns }}
