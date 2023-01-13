@@ -44,7 +44,7 @@ class WriteBackResult extends Bundle {
     val rdData         = UInt(64.W)
 }
 
-class branchResults extends Bundle {
+class BranchResult extends Bundle {
     val valid       = Bool()
     val nextInstPtr = UInt(64.W)
     val PC          = UInt(64.W)
