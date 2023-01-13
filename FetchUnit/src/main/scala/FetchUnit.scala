@@ -1,5 +1,5 @@
 /*
- Fetch Unit for in-order without speculation
+ Fetch Unit for in-order with speculation
  */
 
 import chisel3._
@@ -22,30 +22,12 @@ class branch_detector extends Module {
 
 class FetchUnit(val pc_reset_val: Int, val fifo_size: Int) extends Module {
   val io = IO(new Bundle {
-
-    //reqport signals
-    val reqport_valid = Output(UInt(1.W))
-    val reqport_ready = Input(UInt(1.W))
-    val reqport_addr = Output(UInt(64.W))
-
-    //resport signals
-    val resport_valid = Input(UInt(1.W))
-    val resport_ready = Output(UInt(1.W))
-    val resport_instr = Input(UInt(32.W))
-
-    //Issueport signals
-    val issueport_valid = Output(UInt(1.W))
-    val issueport_instr = Output(UInt(32.W))
-    val issueport_pc = Output(UInt(64.W))
-
-    //BranchResult Port
-    val target_input = Input(UInt(64.W))
-    val target_valid = Input(UInt(1.W))
-
-    //pipelinestall signal
-    val pipelinestalled = Input(UInt(1.W))
-
+    val reqport = new DecoupledIO(UInt(64.W))
+    val resport =  Flipped(new DecoupledIO(UInt(32.W)))
+    val issueport = new Issueport()
+    val execport = new Execport()
   })
+
   //register defs
   val PC = RegInit(pc_reset_val.U(64.W))
   val IR = RegInit(0.U(32.W))
@@ -60,47 +42,51 @@ class FetchUnit(val pc_reset_val: Int, val fifo_size: Int) extends Module {
 
   //connect PC_fifo
   PC_fifo.io.enq.bits := PC
-  PC_fifo.io.enq.valid := io.reqport_valid & io.reqport_ready
-  PC_fifo.io.deq.ready := io.resport_valid & ~io.pipelinestalled
+  PC_fifo.io.enq.valid := io.reqport.valid & io.reqport.ready
+  PC_fifo.io.deq.ready := io.resport.valid & io.issueport.ready
 
-  when (io.pipelinestalled === 0.U) {
+  when (io.issueport.ready === 1.U) {
     insport_pc := PC_fifo.io.deq.bits
   }
-  io.issueport_pc := insport_pc
+  io.issueport.PC := insport_pc
 
   //PC update logic
-  when (internal_stall===1.U & io.target_valid===1.U){
-    PC := io.target_input
-  } .elsewhen(io.reqport_ready === 1.U & io.reqport_valid === 1.U){
+  when (internal_stall===1.U & io.execport.valid===1.U){
+    PC := io.execport.branch_address
+  } .elsewhen(io.reqport.ready === 1.U & io.reqport.valid === 1.U){
     PC := PC + 4.U
   }
-  io.reqport_addr := PC
+  io.reqport.bits := PC
 
   //PC valid bit logic
   when (branch_detector.io.is_branch === 1.U & PC_valid === 1.U){
     PC_valid := 0.U
-  } .elsewhen(io.target_valid === 1.U){
+  } .elsewhen(io.execport.valid === 1.U){
     PC_valid := 1.U
   }
 
 
   //ready valid signal logic
-  io.reqport_valid := ~internal_stall & PC_fifo.io.enq.ready
-  io.resport_ready := ~(io.pipelinestalled) & PC_fifo.io.deq.valid
-  io.issueport_valid := IR_valid & (~internal_stall) & (~io.pipelinestalled)
+  io.reqport.valid := ~internal_stall & PC_fifo.io.enq.ready
+  io.resport.ready := io.issueport.ready & PC_fifo.io.deq.valid
+  io.issueport.valid := IR_valid & (~internal_stall) & (io.issueport.ready)
 
 
   //IR update logic
-  when (io.resport_ready===1.U & io.resport_valid===1.U & internal_stall===0.U & io.pipelinestalled===0.U){
-    IR := io.resport_instr
+  when (io.resport.ready===1.U & io.resport.valid===1.U & internal_stall===0.U & io.issueport.ready===1.U){
+    IR := io.resport.bits
   }
-  io.issueport_instr := IR
+  io.issueport.ins := IR
   branch_detector.io.instr := IR
-  IR_valid := io.resport_valid & ~internal_stall
+  when(IR_valid === 0.U) {
+    IR_valid := (io.resport.ready === 1.U & io.resport.valid === 1.U & internal_stall === 0.U & io.issueport.ready === 1.U).asUInt
+  }.otherwise {
+    IR_valid := io.issueport.ready | (io.resport.ready === 1.U & io.resport.valid === 1.U & internal_stall === 0.U & io.issueport.ready === 1.U).asUInt
+  }
 
   //stall logic
   when (internal_stall === 0.U){
-    internal_stall := branch_detector.io.is_branch
+    internal_stall := branch_detector.io.is_branch & IR_valid
   } .elsewhen (PC_fifo.io.deq.valid === 0.U & PC_valid === 1.U){
     internal_stall := 0.U
   }
