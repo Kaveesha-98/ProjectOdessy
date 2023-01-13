@@ -99,7 +99,6 @@ class DecodeUnit extends Module{
   decodeIssueBuffer.rs1 := registerFile(ins(19, 15))
   decodeIssueBuffer.rs2 := registerFile(ins(24, 20))
 
-  decodeIssueBuffer.opCode := ins(6, 0)
 
   // Register writing
   when(writeEn === 1.U & writeRd =/= 0.U) {
