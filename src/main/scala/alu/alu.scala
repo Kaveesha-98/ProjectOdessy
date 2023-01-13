@@ -4,21 +4,8 @@ import chisel3._
 import chisel3.util._
 import chisel3.experimental.BundleLiterals._
 
-import common._
 import pipeline._
-
-class DecodeIssuePort extends Bundle {
-    val PC          = UInt(64.W)
-    val instruction = UInt(32.W)
-    val rs1         = UInt(64.W)
-    val rs2         = UInt(64.W)
-    val immediate   = UInt(64.W)
-}
-
-class BranchResult extends Bundle {
-    val target = UInt(64.W)
-    val valid = Bool()
-}
+import pipeline.ports._
 
 abstract class aluTemplate extends Module {
     val decodeIssuePort = IO(new handshake(new DecodeIssuePort()))
@@ -28,7 +15,7 @@ abstract class aluTemplate extends Module {
     def getsWriteBack(recievedIns: DecodeIssuePort): AluIssuePort
     def resolveBranch(recievedIns: DecodeIssuePort): BranchResult
 
-    val passThrough :: waitOnMem :: execBuffIns :: Nil = Enum(3)
+    val passThrough :: waitOnMem :: execBuffIns :: flush :: Nil = Enum(4)
     val stateReg = RegInit(passThrough)
 
     /**
@@ -46,16 +33,24 @@ abstract class aluTemplate extends Module {
       */
     val issuePortBits = Reg(new AluIssuePort())
     when(stateReg =/= waitOnMem) {
-        issuePortBits := getsWriteBack(Mux(stateReg === passThrough, decodeIssuePort.bits, bufferdInstruction))\
+        issuePortBits := getsWriteBack(Mux(stateReg === passThrough, decodeIssuePort.bits, bufferdInstruction))
     }
 
     /**
       * Branch results are broadcasted in the next
       * cycle to the decode and fetch units
       */
-    val branchResultDriver = RegInit((new BranchResult).Lit(_.target -> 0.U, _.valid -> false.B))
+    val branchResultDriver = RegInit((new BranchResult).Lit(
+        _.valid -> false.B,
+        _.nextInstPtr -> 0.U,
+        _.PC -> 0.U,
+        _.predicted -> false.B,
+        _.isBranch -> false.B,
+        _.branchTaken -> false.B
+        ))
+    val branchResolvedResults = resolveBranch(decodeIssuePort.bits)
     when(stateReg === passThrough) {
-        branchResultDriver := resolveBranch(decodeIssuePort.bits)
+        branchResultDriver := branchResolvedResults
     }.otherwise {
         branchResultDriver.valid := false.B
     }
@@ -67,9 +62,13 @@ abstract class aluTemplate extends Module {
     }
 
     switch(stateReg) {
-        is(passThrough) { when(decodeIssuePort.valid && !aluIssuePort.ready){ stateReg := waitOnMem }}
+        is(passThrough) { 
+            when(decodeIssuePort.valid && !branchResolvedResults.predicted) { stateReg := flush } 
+            .elsewhen(decodeIssuePort.valid && !aluIssuePort.ready) { stateReg := waitOnMem }
+        }
         is(waitOnMem)   { when(aluIssuePort.ready){ stateReg := execBuffIns }}
         is(execBuffIns) { stateReg := passThrough }
+        is(flush) { stateReg := passThrough }
     }
 
     aluIssuePort.bits := issuePortBits
@@ -160,6 +159,7 @@ class alu extends aluTemplate {
         val pc = recievedIns.PC
         val rs1 = recievedIns.rs1
         val rs2 = recievedIns.rs2
+        val predNextAddr = recievedIns.predNextAddr
 
         val branchTaken = (Seq(
             rs1 === rs2,
@@ -173,13 +173,20 @@ class alu extends aluTemplate {
 
         val brachNextAddress = Mux(branchTaken, (pc + immediate), (pc + 4.U))
 
-        result.target := Seq(
+        val nextInstPtr = Seq(
             BitPat("b?????????????????????????1101111") -> (pc + immediate), // jal
             BitPat("b?????????????????????????1100111") -> (rs1 + immediate), //jalr
             BitPat("b?????????????????????????1100011") -> brachNextAddress, // branches
         ).foldRight((pc + 4.U))(getResult)
 
-        result.valid := recievedIns.instruction(6, 0) === BitPat("b110??11")
+        result.nextInstPtr := nextInstPtr
+        result.PC := pc
+        result.predicted := nextInstPtr === predNextAddr
+        result.isBranch := recievedIns.instruction(6, 0) === BitPat("b110??11")
+        result.branchTaken := branchTaken
+
+        result.valid := (recievedIns.instruction(6, 0) === BitPat("b110??11") || 
+            nextInstPtr =/= predNextAddr)
         result 
     }
 }
