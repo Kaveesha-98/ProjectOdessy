@@ -43,9 +43,9 @@ class FetchUnit(val pc_reset_val: Int, val fifo_size: Int) extends Module {
   //connect PC_fifo
   PC_fifo.io.enq.bits := PC
   PC_fifo.io.enq.valid := io.reqport.valid & io.reqport.ready
-  PC_fifo.io.deq.ready := io.resport.valid & ~io.issueport.ready
+  PC_fifo.io.deq.ready := io.resport.valid & io.issueport.ready
 
-  when (io.issueport.ready === 0.U) {
+  when (io.issueport.ready === 1.U) {
     insport_pc := PC_fifo.io.deq.bits
   }
   io.issueport.PC := insport_pc
@@ -68,20 +68,20 @@ class FetchUnit(val pc_reset_val: Int, val fifo_size: Int) extends Module {
 
   //ready valid signal logic
   io.reqport.valid := ~internal_stall & PC_fifo.io.enq.ready
-  io.resport.ready := ~(io.issueport.ready) & PC_fifo.io.deq.valid
-  io.issueport.valid := IR_valid & (~internal_stall) & (~io.issueport.ready)
+  io.resport.ready := io.issueport.ready & PC_fifo.io.deq.valid
+  io.issueport.valid := IR_valid & (~internal_stall) & (io.issueport.ready)
 
 
   //IR update logic
-  when (io.resport.ready===1.U & io.resport.valid===1.U & internal_stall===0.U & io.issueport.ready===0.U){
+  when (io.resport.ready===1.U & io.resport.valid===1.U & internal_stall===0.U & io.issueport.ready===1.U){
     IR := io.resport.bits
   }
   io.issueport.ins := IR
   branch_detector.io.instr := IR
   when(IR_valid === 0.U) {
-    IR_valid := (io.resport.ready === 1.U & io.resport.valid === 1.U & internal_stall === 0.U & io.issueport.ready === 0.U).asUInt
+    IR_valid := (io.resport.ready === 1.U & io.resport.valid === 1.U & internal_stall === 0.U & io.issueport.ready === 1.U).asUInt
   }.otherwise {
-    IR_valid := io.issueport.ready | (io.resport.ready === 1.U & io.resport.valid === 1.U & internal_stall === 0.U & io.issueport.ready === 0.U).asUInt
+    IR_valid := io.issueport.ready | (io.resport.ready === 1.U & io.resport.valid === 1.U & internal_stall === 0.U & io.issueport.ready === 1.U).asUInt
   }
 
   //stall logic
