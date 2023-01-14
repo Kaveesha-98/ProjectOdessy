@@ -28,9 +28,9 @@ abstract class aluTemplate extends Module {
     val buffered = RegInit(false.B)
     when(stateReg === passThrough && (!aluIssuePort.ready || aluIssueValid)){
         bufferdInstruction := decodeIssuePort.bits
-        buffered := true
+        buffered := true.B
     }
-    when (stateReg === execBuffIns) { bufferd := false }
+    when (stateReg === execBuffIns) { buffered := false.B }
 
     /**
       * Instruction is passed through either the buffered instruction(priority)
@@ -86,7 +86,7 @@ abstract class aluTemplate extends Module {
         }
         is(waitOnMem)   { when(aluIssuePort.ready){ stateReg := execBuffIns }}
         is(execBuffIns) { stateReg := passThrough }
-        is(flush) { stateReg := Mux(bufferd, execBuffIns, passThrough) }
+        is(flush) { stateReg := Mux(buffered, execBuffIns, passThrough) }
     }
 
     aluIssuePort.bits := issuePortBits
