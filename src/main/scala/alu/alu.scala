@@ -19,14 +19,18 @@ abstract class aluTemplate extends Module {
     val stateReg = RegInit(passThrough)
 
     /**
-      * If memory unit is not ready, then the instruction accepted in this
-      * cycle must be buffered.
+      * If memory unit is not ready or there are currently no instruction
+      * being presented on aluIssuePort, then the instruction accepted in 
+      * this cycle must be buffered.
       */
     val aluIssueValid = RegInit(false.B)
     val bufferdInstruction = Reg(new DecodeIssuePort())
+    val buffered = RegInit(false.B)
     when(stateReg === passThrough && (!aluIssuePort.ready || aluIssueValid)){
         bufferdInstruction := decodeIssuePort.bits
+        buffered := true
     }
+    when (stateReg === execBuffIns) { bufferd := false }
 
     /**
       * Instruction is passed through either the buffered instruction(priority)
@@ -56,11 +60,25 @@ abstract class aluTemplate extends Module {
         branchResultDriver.valid := false.B
     }
 
+    /**
+      * aluIssuePort.valid must not be deasserted before an instruction is accepted.
+      * aluIssuePort.{valid and ready} are both asserted only one cycle for each intruction
+      * presented on decodeIssuePort.
+      * aluIssuePort.valid must be asserted at least one cycle for each instruction presented
+      * on decodeIssuePort.
+      */
     switch(stateReg){
         is(passThrough) {when((!aluIssueValid || aluIssuePort.ready)){ aluIssueValid := decodeIssuePort.valid }}
         is(execBuffIns)  {aluIssueValid := true.B}
     }
 
+    /**
+      * Discard the next instruction if prediction from fetch unit is incorrect.
+      * Stall if in the same cycle a instruction is accepted from decode and was
+      * not able to send one to memory unit.
+      * WaitOnMem state will only happen if an instruction is buffered.
+      * Flush is only one cycle. After that cycle instructions are correct.
+      */
     switch(stateReg) {
         is(passThrough) { 
             when(decodeIssuePort.valid && !branchResolvedResults.predicted && aluIssuePort.ready) { stateReg := flush } 
@@ -68,7 +86,7 @@ abstract class aluTemplate extends Module {
         }
         is(waitOnMem)   { when(aluIssuePort.ready){ stateReg := execBuffIns }}
         is(execBuffIns) { stateReg := passThrough }
-        is(flush) { stateReg := passThrough }
+        is(flush) { stateReg := Mux(bufferd, execBuffIns, passThrough) }
     }
 
     aluIssuePort.bits := issuePortBits
