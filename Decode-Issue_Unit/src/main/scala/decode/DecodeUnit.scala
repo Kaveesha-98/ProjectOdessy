@@ -15,16 +15,17 @@ class handshake[T <: Data](gen: T) extends Bundle {
 class FetchIssuePort extends Bundle {
   val instruction = UInt(32.W)
   val PC          = UInt(64.W)
+  val predNextAddr = UInt(64.W)
 }
 
 // Outputs for ALU
 class DecodeIssuePort extends Bundle {
   val instruction = UInt(32.W)
   val PC          = UInt(64.W)
-  val opCode      = UInt(7.W)
   val rs1         = UInt(64.W)
   val rs2         = UInt(64.W)
   val immediate   = UInt(64.W)
+  val predNextAddr = UInt(64.W)
 }
 
 // Inputs for Register file
@@ -34,13 +35,21 @@ class WriteBackResult extends Bundle {
   val rdData         = UInt(64.W)
 }
 
+class BranchResult extends Bundle {
+  val valid = Bool()
+  val predicted = Bool()
+}
+
 class DecodeUnit extends Module{
   val io = IO(new Bundle() {
     val fetchIssuePort  = new handshake(new FetchIssuePort)
     val decodeIssuePort = Flipped(new handshake(new DecodeIssuePort))
     val writeBackResult = Input(new WriteBackResult)
-    val branchMisspredict = Input(Bool())
+    val branchResult    = Input(new BranchResult)
   })
+
+  val missPredict = WireDefault(false.B)
+  missPredict := io.branchResult.valid & (~io.branchResult.predicted)
 
   val rdBuffer = RegInit(0.U(5.W))
   val prevRdBuffer = RegInit(0.U(5.W))
@@ -96,7 +105,6 @@ class DecodeUnit extends Module{
   // Assigning outputs
   io.decodeIssuePort.bits.PC          := decodeIssueBuffer.pc
   io.decodeIssuePort.bits.instruction := decodeIssueBuffer.ins
-  io.decodeIssuePort.bits.opCode      := decodeIssueBuffer.opCode
   io.decodeIssuePort.bits.immediate   := decodeIssueBuffer.imm
   io.decodeIssuePort.valid            := validOut
   io.decodeIssuePort.bits.rs1         := decodeIssueBuffer.rs1
@@ -132,6 +140,57 @@ class DecodeUnit extends Module{
     is(rtype.U) { decodeIssueBuffer.imm := Fill(64, 0.U) }
   }
 
+  // FSM for ready valid interface
+  // ------------------------------------------------------------------------------------------------------------------ //
+  val idleState :: passthroughState :: waitState :: stallState :: Nil = Enum(4) // States of FSM
+  val stateReg = RegInit(idleState)
+
+  switch(stateReg) {
+    is(idleState) {
+      validOut := 0.U
+      readyOut := 1.U
+      when(missPredict) {
+        stateReg := idleState
+      } otherwise {
+        when(validIn === 1.U) {
+          stateReg := Mux(stalled === 1.U, stallState, Mux(readyIn === 1.U, passthroughState, waitState))
+        }
+      }
+    }
+    is(passthroughState) {
+      validOut := 1.U
+      readyOut := 1.U
+      when(missPredict) {
+        stateReg := idleState
+      } otherwise {
+        stateReg := Mux(readyIn === 0.U, waitState, Mux(validIn === 1.U, Mux(stalled === 1.U, stallState, passthroughState), idleState))
+      }
+    }
+    is(waitState) {
+      validOut := 1.U
+      readyOut := 0.U
+      when(missPredict) {
+        stateReg := idleState
+      } otherwise {
+        when(readyIn === 1.U) {
+          stateReg := Mux(validIn === 1.U, passthroughState, idleState)
+        }
+      }
+    }
+    is(stallState) {
+      validOut := 0.U
+      readyOut := 0.U
+      when(missPredict) {
+        stateReg := idleState
+      } otherwise {
+        when(stalled === 0.U) {
+          stateReg := Mux(readyIn === 1.U, passthroughState, waitState)
+        }
+      }
+    }
+  }
+  // ------------------------------------------------------------------------------------------------------------------ //
+
   // Valid bits for each register
   val validBit = RegInit(VecInit(Seq.fill(32)(1.U(1.W))))
   validBit(0) := 1.U
@@ -153,76 +212,27 @@ class DecodeUnit extends Module{
 
   // Checking rs1 validity
   when(insType === rtype.U | insType === itype.U | insType === stype.U | insType === btype.U) {
-    when(validBit(ins(19, 15)) === 0.U & ~(io.branchMisspredict & ins(19, 15) === rdBuffer)) { rs1Valid := 0.U }
+    when(validBit(ins(19, 15)) === 0.U) { rs1Valid := 0.U }
   }
   // Checking rs2 validity
   when(insType === rtype.U | insType === stype.U | insType === btype.U) {
-    when(validBit(ins(24, 20)) === 0.U & ~(io.branchMisspredict & ins(24, 20) === rdBuffer)) { rs2Valid := 0.U }
+    when(validBit(ins(24, 20)) === 0.U) { rs2Valid := 0.U }
   }
   // Checking rd validity and changing the valid bit for rd
   when(insType === rtype.U | insType === utype.U | insType === itype.U | insType === jtype.U) {
-    when(validBit(ins(11, 7)) === 0.U & ~(io.branchMisspredict & ins(11, 7) === rdBuffer)) { rdValid := 0.U }
+    when(validBit(ins(11, 7)) === 0.U) { rdValid := 0.U }
     .otherwise {
-      when(readyIn === 1.U & validOut === 1.U & decodeIssueBuffer.ins(11, 7) =/= 0.U) { validBit(decodeIssueBuffer.ins(11, 7)) := 0.U }
+      when(stalled === 0.U & validIn === 1.U & readyOut === 1.U & ins(11, 7) =/= 0.U & ~missPredict) { validBit(ins(11, 7)) := 0.U }
     }
   }
 
-  when(io.branchMisspredict) {
+  when(missPredict) {
     validBit(prevRdBuffer) := 1.U
+    validBit(rdBuffer) := 1.U
   }
 
   stalled := ~(rdValid & rs1Valid & rs2Valid)     // stall signal for FSM
 
-  // FSM for ready valid interface
-  // ------------------------------------------------------------------------------------------------------------------ //
-  val idleState :: passthroughState :: waitState :: stallState :: Nil = Enum(4)     // States of FSM
-  val stateReg = RegInit(idleState)
-
-  switch(stateReg) {
-    is(idleState) {
-      validOut := 0.U
-      readyOut := 1.U
-      when(io.branchMisspredict) {
-        stateReg := idleState
-      } otherwise {
-        when(validIn === 1.U) {
-          stateReg := Mux(stalled === 1.U, stallState, Mux(readyIn === 1.U, passthroughState, waitState))
-        }
-      }
-    }
-    is(passthroughState) {
-      validOut := 1.U
-      readyOut := 1.U
-      when(io.branchMisspredict) {
-        stateReg := idleState
-      } otherwise {
-        stateReg := Mux(readyIn === 0.U, waitState, Mux(validIn === 1.U, Mux(stalled === 1.U, stallState, passthroughState), idleState))
-      }
-    }
-    is(waitState) {
-      validOut := 1.U
-      readyOut := 0.U
-      when(io.branchMisspredict) {
-        stateReg := idleState
-      } otherwise {
-        when(readyIn === 1.U) {
-          stateReg := Mux(validIn === 1.U, passthroughState, idleState)
-        }
-      }
-    }
-    is(stallState) {
-      validOut := 0.U
-      readyOut := 0.U
-      when(io.branchMisspredict) {
-        stateReg := idleState
-      } otherwise {
-        when(stalled === 0.U) {
-          stateReg := Mux(readyIn === 1.U, passthroughState, waitState)
-        }
-      }
-    }
-  }
-  // ------------------------------------------------------------------------------------------------------------------ //
 }
 
 object DECODE_ISSUE_UNIT extends App{
