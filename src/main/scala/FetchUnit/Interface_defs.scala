@@ -1,3 +1,5 @@
+package pipeline.fetch
+
 import chisel3._
 
 class DecoupledIO[T <: Data ]( gen: T) extends Bundle {

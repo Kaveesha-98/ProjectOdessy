@@ -1,3 +1,5 @@
+package pipeline.fetch
+
 /*
  Fetch Unit for in-order with speculation
  */
