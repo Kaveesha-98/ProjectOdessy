@@ -4,6 +4,7 @@
 
 import Chisel.Cat
 import chisel3._
+import chisel3.util._
 
 class BHT extends Module {
   val io = IO(new Bundle {
@@ -12,7 +13,7 @@ class BHT extends Module {
     val next_pc = Output(UInt(64.W))
   })
 
-  when (!io.execport.predicted) {
+  when (!io.execport.predicted & io.execport.valid) {
     io.next_pc := io.execport.branch_address
   } .otherwise {
     io.next_pc := io.curr_pc + 4.U
@@ -44,7 +45,6 @@ class FetchUnit(val pc_reset_val: Int, val fifo_size: Int) extends Module {
   PC_fifo.io.enq.bits := Cat(PC,bht.io.next_pc)
   PC_fifo.io.enq.valid := io.reqport.valid & io.reqport.ready
   PC_fifo.io.deq.ready := io.resport.valid & io.issueport.ready
-
   when (io.issueport.ready === 1.U) {
     insport_pc := PC_fifo.io.deq.bits
   }
@@ -70,15 +70,12 @@ class FetchUnit(val pc_reset_val: Int, val fifo_size: Int) extends Module {
     IR := io.resport.bits
   }
   io.issueport.ins := IR
-  when(IR_valid === 0.U) {
-    IR_valid := (io.resport.ready === 1.U & io.resport.valid === 1.U & internal_stall === 0.U & io.issueport.ready === 1.U).asUInt
-  }.otherwise {
-    IR_valid := io.issueport.ready | (io.resport.ready === 1.U & io.resport.valid === 1.U & internal_stall === 0.U & io.issueport.ready === 1.U).asUInt
-  }
+  IR_valid := io.resport.ready & io.resport.valid & internal_stall===0.U
+
 
   //stall logic
   when (internal_stall === 0.U){
-    internal_stall := io.execport.predicted
+    internal_stall := !io.execport.predicted & io.execport.valid
   } .elsewhen (PC_fifo.io.deq.valid === 0.U){
     internal_stall := 0.U
   }
