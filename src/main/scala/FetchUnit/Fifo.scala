@@ -1,18 +1,5 @@
-package pipeline.fetch
-
 import Chisel.log2Ceil
 import chisel3._
-
-class DecoupledIO[T <: Data ]( gen: T) extends Bundle {
-  val ready = Input(Bool ())
-  val valid = Output(Bool ())
-  val bits = Output(gen)
-}
-
-class FifoIO[T <: Data ](private val gen: T) extends Bundle {
-  val enq = Flipped(new DecoupledIO(gen))
-  val deq = new DecoupledIO (gen)
-}
 
 abstract class Fifo[T <: Data ]( gen: T, val depth: Int) extends Module {
   val io = IO(new FifoIO(gen))
