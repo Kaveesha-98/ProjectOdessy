@@ -7,6 +7,9 @@ import chisel3.util._
 import chisel3.experimental.BundleLiterals._
 
 class blankDecode extends Module {
+    /**
+      * This is a blank module. Only interfaces are defined. The outputs are driven with Literal values
+      */
     val fetchIssueIntfce = IO(new Bundle{
         val ready       = Output(Bool())
         val issued      = Input(Bool())
