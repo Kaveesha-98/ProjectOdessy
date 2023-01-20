@@ -1,6 +1,7 @@
 package pipeline.decode
 
 import Constants._
+import pipeline.ports.{DecodeIssuePort, WriteBackResult, handshake}
 
 import chisel3._
 import chisel3.util._
