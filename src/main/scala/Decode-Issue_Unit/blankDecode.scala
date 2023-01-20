@@ -38,9 +38,9 @@ class blankDecode extends Module {
     )
 
     // These are place holder values for an actual implementation
-    fetchIssueIntfce.ready              := false.B
-    fetchIssueIntfce.expected.valid     := false.B
-    fetchIssueIntfce.expected.PC        := 0.U
+    fetchIssueIntfce.ready              := true.B
+    fetchIssueIntfce.expected.valid     := true.B
+    fetchIssueIntfce.expected.PC        := "h8000_0000".U
 
     decodeIssuePort.valid := 0.U
     decodeIssuePort.bits := (new DecodeIssuePort).Lit(
@@ -101,7 +101,7 @@ class decodeHWTestbench extends Module {
     val conditional_fetch_issue = Seq(fetchIssueIntfce, dutDecode.fetchIssueIntfce)
     conditional_fetch_issue.foreach(_.issued := (
         fetchIssueIntfce.ready && dutDecode.fetchIssueIntfce.ready &&
-        (!dutDecode.fetchIssueIntfce.expected.valid || (dutDecode.fetchIssueIntfce.expected.PC === fetchIssueIntfce.expected.PC))
+        (!dutDecode.fetchIssueIntfce.expected.valid || (dutDecode.fetchIssueIntfce.expected.PC === fetchIssueIntfce.PC))
     ))
     
     val branchResult = IO(dutDecode.branchResult.cloneType)
