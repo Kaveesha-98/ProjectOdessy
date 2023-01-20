@@ -197,6 +197,14 @@ int main(int argc, char **argv){
 	tb->trace(tfp, 99);
 	tfp->open("decodeHWTestbench_trace.vcd");
 	
+	tb -> reset = 1;
+	for (int i = 0; i < 3; i++)
+	{
+		tick(++tickcount, tb, tfp);
+	}
+	tb -> reset = 0;
+	tick(++tickcount, tb, tfp);
+
 	tb -> fetchIssueIntfce_ready = 1;
 	while (instructionStream.size())
 	{
