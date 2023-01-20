@@ -34,7 +34,7 @@ class branch_detector extends Module {
  * Output: expected.valid = Expected PC is valid or not
  * Output: expected.PC    = Expected PC value from the fetch unit
  */
-class FetchIssuePort extends Bundle {
+class fetchIssueIntfce extends Bundle {
   val ready       = Output(Bool())
   val issued      = Input(Bool())
   val PC          = Input(UInt(64.W))
@@ -67,20 +67,18 @@ class BranchResult extends Bundle {
  */
 class DecodeUnit extends Module{
   // Initializing the input/output ports
-  val io = IO(new Bundle() {
-    val fetchIssuePort  = new FetchIssuePort
-    val decodeIssuePort = Flipped(new handshake(new DecodeIssuePort))
-    val writeBackResult = Input(new WriteBackResult)
-    val branchResult    = Output(new BranchResult)
-  })
+  val fetchIssueIntfce  = IO(new fetchIssueIntfce)
+  val decodeIssuePort = IO(Flipped(new handshake(new DecodeIssuePort)))
+  val writeBackResult = IO(Input(new WriteBackResult))
+  val branchResult    = IO(Output(new BranchResult))
 
   // Assigning some wires for inputs
-  val validIn   = io.fetchIssuePort.issued
-  val writeEn   = io.writeBackResult.toRegisterFile
-  val writeData = io.writeBackResult.rdData
+  val validIn   = fetchIssueIntfce.issued
+  val writeEn   = writeBackResult.toRegisterFile
+  val writeData = writeBackResult.rdData
   val writeRd   = Wire(UInt(5.W))
-  writeRd      := io.writeBackResult.rd
-  val readyIn   = io.decodeIssuePort.ready
+  writeRd      := writeBackResult.rd
+  val readyIn   = decodeIssuePort.ready
 
   // Initializing a buffer for storing the input values (PC, instruction)
   val fetchIssueBuffer = RegInit({
@@ -88,8 +86,8 @@ class DecodeUnit extends Module{
       val PC          = UInt(64.W)
       val instruction = UInt(32.W)
     })
-    initialState.PC := 0.U
-    initialState.instruction := "h80000000".U - 4.U   // Initial value is set for the use of expectedPC
+    initialState.PC := "h80000000".U - 4.U   // Initial value is set for the use of expectedPC
+    initialState.instruction := 0.U
     initialState
   })
 
@@ -108,7 +106,7 @@ class DecodeUnit extends Module{
   val stalled  = WireDefault(false.B)       // Stall signal
 
   val ins = WireDefault(0.U(32.W))           // Current instruction
-  val pc  = WireDefault(0.U(64.W))           // Address of current instruction
+//  val pc  = WireDefault(0.U(64.W))           // Address of current instruction
 
   val isBranch   = WireDefault(false.B)      // Current instruction is a branch or not
   val expectedPC = WireDefault(0.U(64.W))    // Expected PC value from the fetch unit
@@ -119,13 +117,13 @@ class DecodeUnit extends Module{
   val branchTarget  = WireDefault(0.U(64.W)) // Next address of the instruction after the branch
 
   // Storing instruction and PC in a buffer
-  when(validIn & readyOut & io.fetchIssuePort.expected.PC === io.fetchIssuePort.PC) {
-    fetchIssueBuffer.instruction := io.fetchIssuePort.instruction
-    fetchIssueBuffer.PC          := io.fetchIssuePort.PC
+  when(validIn & readyOut & fetchIssueIntfce.expected.PC === fetchIssueIntfce.PC) {
+    fetchIssueBuffer.instruction := fetchIssueIntfce.instruction
+    fetchIssueBuffer.PC          := fetchIssueIntfce.PC
   }
 
   ins := fetchIssueBuffer.instruction
-  pc  := fetchIssueBuffer.PC
+  val pc  = fetchIssueBuffer.PC
 
   //  ------------------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -168,22 +166,22 @@ class DecodeUnit extends Module{
   //  -----------------------------------------------------------------------------------------------------------------------------------------------------------
 
   // Assigning outputs
-  io.decodeIssuePort.valid             := validOut
-  io.decodeIssuePort.bits.PC           := fetchIssueBuffer.PC
-  io.decodeIssuePort.bits.instruction  := fetchIssueBuffer.instruction
-  io.decodeIssuePort.bits.immediate    := immediate
-  io.decodeIssuePort.bits.rs1          := rs1Data
-  io.decodeIssuePort.bits.rs2          := rs2Data
-  io.decodeIssuePort.bits.predNextAddr := 0.U
+  decodeIssuePort.valid             := validOut
+  decodeIssuePort.bits.PC           := fetchIssueBuffer.PC
+  decodeIssuePort.bits.instruction  := fetchIssueBuffer.instruction
+  decodeIssuePort.bits.immediate    := immediate
+  decodeIssuePort.bits.rs1          := rs1Data
+  decodeIssuePort.bits.rs2          := rs2Data
+  decodeIssuePort.bits.predNextAddr := 0.U
 
-  io.fetchIssuePort.ready          := readyOut
-  io.fetchIssuePort.expected.PC    := expectedPC
-  io.fetchIssuePort.expected.valid := readyOut
+  fetchIssueIntfce.ready          := readyOut
+  fetchIssueIntfce.expected.PC    := expectedPC
+  fetchIssueIntfce.expected.valid := readyOut
 
-  io.branchResult.valid         := branchValid
-  io.branchResult.branchTaken   := branchIsTaken
-  io.branchResult.PC            := branchPC
-  io.branchResult.targetAddress := branchTarget
+  branchResult.valid         := branchValid
+  branchResult.branchTaken   := branchIsTaken
+  branchResult.PC            := branchPC
+  branchResult.targetAddress := branchTarget
 
   // Deciding the instruction type
   switch (ins(6,0)) {
@@ -223,7 +221,7 @@ class DecodeUnit extends Module{
     is(emptyState) {
       validOut := false.B
       readyOut := true.B
-      when(validIn & io.fetchIssuePort.PC === io.fetchIssuePort.expected.PC) {
+      when(validIn & fetchIssueIntfce.PC === fetchIssueIntfce.expected.PC) {
         stateReg := fullState
       }
     }
@@ -235,7 +233,7 @@ class DecodeUnit extends Module{
         validOut := true.B
         when(readyIn) {
           readyOut := true.B
-          when( validIn === false.B | io.fetchIssuePort.PC =/= io.fetchIssuePort.expected.PC) {
+          when( validIn === false.B | fetchIssueIntfce.PC =/= fetchIssueIntfce.expected.PC) {
             stateReg := emptyState
           }
         } otherwise {
