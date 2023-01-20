@@ -23,6 +23,19 @@ class blankDecode extends Module {
 
     val decodeIssuePort = IO(Flipped(new handshake(new DecodeIssuePort)))
     val writeBackResult = IO(Input(new WriteBackResult))
+    val branchResult = IO(Output(new Bundle{
+    	val valid = Bool()
+    	val branchTaken = Bool()
+    	val PC = UInt(64.W)
+    	val targetAddress = UInt(64.W)
+    }))
+    
+    branchResult := branchResult.cloneType.Lit(
+    	_.valid 		-> false.B,
+    	_.branchTaken 	-> false.B,
+    	_.PC 			-> 0.U,
+    	_.targetAddress -> 0.U
+    )
 
     // These are place holder values for an actual implementation
     fetchIssueIntfce.ready              := false.B
@@ -90,6 +103,9 @@ class decodeHWTestbench extends Module {
         fetchIssueIntfce.ready && dutDecode.fetchIssueIntfce.ready &&
         (!dutDecode.fetchIssueIntfce.expected.valid || (dutDecode.fetchIssueIntfce.expected.PC === fetchIssueIntfce.expected.PC))
     ))
+    
+    val branchResult = IO(dutDecode.branchResult.cloneType)
+    branchResult <> dutDecode.branchResult
 
     // For testing purposes this interface must be visible for outside
     val decodeIssuePort = IO(Flipped(dutDecode.decodeIssuePort.cloneType))
