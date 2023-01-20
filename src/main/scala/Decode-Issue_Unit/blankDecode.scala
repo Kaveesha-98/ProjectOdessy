@@ -89,7 +89,7 @@ class decodeHWTestbench extends Module {
         }
     })
 
-    val dutDecode = Module(new blankDecode)
+    val dutDecode = Module(new DecodeUnit)
     /* connecting the decode to instruction stream */
     fetchIssueIntfce.PC             <> dutDecode.fetchIssueIntfce.PC
     fetchIssueIntfce.instruction    <> dutDecode.fetchIssueIntfce.instruction
