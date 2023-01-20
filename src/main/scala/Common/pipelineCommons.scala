@@ -35,7 +35,6 @@ class DecodeIssuePort extends Bundle {
 class FetchIssuePort extends Bundle {
     val instruction     = UInt(32.W)
     val PC              = UInt(64.W)
-    val predNextAddr    = UInt(64.W)
 }
 
 class WriteBackResult extends Bundle {
