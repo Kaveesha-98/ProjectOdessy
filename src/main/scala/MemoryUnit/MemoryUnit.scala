@@ -113,7 +113,6 @@ class MemoryUnit extends Module {
         memIssueValid := false.B
     }
 
-    // writeback has bug that needs to be fixed-------------------
     switch(stateReg) {
         is(passThrough) {
             when(aluIssuePort.valid && aluIssuePort.bits.instruction(6, 0) === BitPat("b0?00011")) {

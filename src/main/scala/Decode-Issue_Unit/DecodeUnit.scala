@@ -1,151 +1,126 @@
 package pipeline.decode
 
+import Constants._
+
 import chisel3._
 import chisel3.util._
 
-import Constants._
-import pipeline.ports.{DecodeIssuePort, WriteBackResult, handshake}
-
-/**
- * This module will output whether the input instruction is a branch or not
- *
- * Input:  instr     = Instruction to check
- * Output: is_branch = Branch or not
- */
-class branch_detector extends Module {
-  val io = IO(new Bundle {
-    val instr     = Input(UInt(32.W))
-    val is_branch = Output(Bool())
-  })
-  val op1       = io.instr(6,5)
-  val op2       = io.instr(4,2)
-  val flag1     = op1 === "b11".U
-  val flag2     = op2 === "b001".U || op2 === "b011".U || op2 === "b000".U
-  io.is_branch :=  flag1 && flag2
+class handshake[T <: Data](gen: T) extends Bundle {
+  val ready = Output(UInt(1.W))
+  val valid = Input(UInt(1.W))
+  val bits  = Input(gen)
 }
 
-/**
- * Interface ports between fetch unit and decode unit
- *
- * Input:  issued         = Received data valid or not
- * Input:  PC             = Address of current input instruction
- * Input:  instruction    = Current input instruction
- * Output: ready          = Fetch unit is ready to take next instruction or not
- * Output: expected.valid = Expected PC is valid or not
- * Output: expected.PC    = Expected PC value from the fetch unit
- */
-class fetchIssueIntfce extends Bundle {
-  val ready       = Output(Bool())
-  val issued      = Input(Bool())
-  val PC          = Input(UInt(64.W))
-  val instruction = Input(UInt(64.W))
-
-  val expected = new Bundle {
-    val valid = Output(Bool())
-    val PC    = Output(UInt(64.W))
-  }
+// Inputs from Fetch unit
+class FetchIssuePort extends Bundle {
+  val instruction = UInt(32.W)
+  val PC          = UInt(64.W)
 }
 
-/**
- * Interface ports for branch results
- *
- * Output: valid         = Signals from this interface is valid or not
- * Output: branchTaken   = Branch is taken or not
- * Output: PC            = Address of the branch instruction
- * Output: targetAddress = Address of the target instruction after the branch
- */
-class BranchResult extends Bundle {
-  val valid         = Bool()
-  val branchTaken   = Bool()
-  val PC            = UInt(64.W)
-  val targetAddress = UInt(64.W)
+// Outputs for ALU
+class DecodeIssuePort extends Bundle {
+  val instruction = UInt(32.W)
+  val PC          = UInt(64.W)
+  val opCode      = UInt(7.W)
+  val rs1         = UInt(64.W)
+  val rs2         = UInt(64.W)
+  val immediate   = UInt(64.W)
 }
 
-/**
- * Body of the Decode Module
- *
- */
+// Inputs for Register file
+class WriteBackResult extends Bundle {
+  val toRegisterFile = UInt(1.W)
+  val rd             = UInt(5.W)
+  val rdData         = UInt(64.W)
+}
+
 class DecodeUnit extends Module{
-  // Initializing the input/output ports
-  val fetchIssueIntfce  = IO(new fetchIssueIntfce)
-  val decodeIssuePort = IO(Flipped(new handshake(new DecodeIssuePort)))
-  val writeBackResult = IO(Input(new WriteBackResult))
-  val branchResult    = IO(Output(new BranchResult))
+  val io = IO(new Bundle() {
+    val fetchIssuePort  = new handshake(new FetchIssuePort)
+    val decodeIssuePort = Flipped(new handshake(new DecodeIssuePort))
+    val writeBackResult = Input(new WriteBackResult)
+  })
 
   // Assigning some wires for inputs
-  val validIn   = fetchIssueIntfce.issued
-  val writeEn   = writeBackResult.toRegisterFile
-  val writeData = writeBackResult.rdData
+  val validIn   = io.fetchIssuePort.valid
+//  val pc        = io.fetchIssuePort.bits.PC
+  val writeEn   = io.writeBackResult.toRegisterFile
+  val writeData = io.writeBackResult.rdData
   val writeRd   = Wire(UInt(5.W))
-  writeRd      := writeBackResult.rd
-  val readyIn   = decodeIssuePort.ready
+  writeRd      := io.writeBackResult.rd
+  val readyIn   = io.decodeIssuePort.ready
 
-  // Initializing a buffer for storing the input values (PC, instruction)
+  // Initializing some registers for outputs
   val fetchIssueBuffer = RegInit({
     val initialState = Wire(new Bundle() {
-      val PC          = UInt(64.W)
-      val instruction = UInt(32.W)
+      val pc = UInt(64.W)
+      val ins = UInt(32.W)
     })
-    initialState.PC := "h80000000".U - 4.U   // Initial value is set for the use of expectedPC
+    initialState.pc := 0.U
+    initialState.ins := 0.U
+    initialState
+  })
+
+  // Initializing a buffer for storing the output values to execution unit
+  val decodeIssueBuffer = RegInit({
+    val initialState = Wire(new Bundle() {
+      val instruction = UInt(32.W)
+      val PC = UInt(64.W)
+      val rs1 = UInt(64.W)
+      val rs2 = UInt(64.W)
+      val immediate = UInt(64.W)
+    })
     initialState.instruction := 0.U
+    initialState.PC := 0.U
+    initialState.rs1 := 0.U
+    initialState.rs2 := 0.U
+    initialState.immediate := 0.U
     initialState
   })
 
   // Initializing some intermediate wires
-  val validOut  = WireDefault(false.B)        // Valid signal from decode unit to execute unit
-  val readyOut = WireDefault(false.B)        // Ready signal from decode unit to fetch unit
+  val validOutFetchBuf  = WireDefault(0.U(1.W))
+  val readyOutFetchBuf  = WireDefault(0.U(1.W))
+  val validOutDecodeBuf = WireDefault(0.U(1.W)) // Valid signal of decode buffer
+  val readyOutDecodeBuf = WireDefault(0.U(1.W)) // Ready signal of decode buffer
+  val insType   = WireDefault(0.U(3.W))
+  val rdValid   = WireDefault(1.U(1.W))
+  val rs1Valid  = WireDefault(1.U(1.W))
+  val rs2Valid  = WireDefault(1.U(1.W))
+  val stalled   = WireDefault(0.U(1.W))
+  val ins       = WireDefault(0.U(32.W))
+  val imm       = WireDefault(0.U(64.W))
+  val rs1       = WireDefault(0.U(64.W))
+  val rs2       = WireDefault(0.U(64.W ))
 
-  val insType   = WireDefault(0.U(3.W))      // RISC-V type of the instruction
-  val immediate = WireDefault(0.U(64.W))     // Immediate value of the instruction
-  val rs1Data   = WireDefault(0.U(64.W))     // rs1 source register data
-  val rs2Data   = WireDefault(0.U(64.W))     // rs2 source register data
-
-  val rdValid  = WireDefault(true.B)         // Destination register valid signal
-  val rs1Valid = WireDefault(true.B)         // rs1 register valid signal
-  val rs2Valid = WireDefault(true.B)         // rs2 register valid signal
-  val stalled  = WireDefault(false.B)       // Stall signal
-
-  val ins = WireDefault(0.U(32.W))           // Current instruction
-//  val pc  = WireDefault(0.U(64.W))           // Address of current instruction
-
-  val isBranch   = WireDefault(false.B)      // Current instruction is a branch or not
-  val expectedPC = WireDefault(0.U(64.W))    // Expected PC value from the fetch unit
-
-  val branchValid   = WireDefault(false.B)   // Branch result port signals are valid or not
-  val branchIsTaken = WireDefault(false.B)   // Branch is taken or not
-  val branchPC      = WireDefault(0.U(64.W)) // Address of the branch instruction
-  val branchTarget  = WireDefault(0.U(64.W)) // Next address of the instruction after the branch
-
-  // Initializing states for the FSM
-  val emptyState :: fullState :: Nil = Enum(2) // States of FSM
-  val stateReg = RegInit(emptyState)
-
-  // Storing instruction and PC in a buffer
-  when(validIn && readyOut && fetchIssueIntfce.expected.PC === fetchIssueIntfce.PC) {
-    fetchIssueBuffer.instruction := fetchIssueIntfce.instruction
-    fetchIssueBuffer.PC          := fetchIssueIntfce.PC
+  
+  // Storing instruction value in a register
+  when(validIn === 1.U & readyOutFetchBuf === 1.U) {
+    fetchIssueBuffer.ins := io.fetchIssuePort.bits.instruction
+    fetchIssueBuffer.pc  := io.fetchIssuePort.bits.PC
   }
 
-  ins := fetchIssueBuffer.instruction
-  val pc  = fetchIssueBuffer.PC
-  
+  ins := fetchIssueBuffer.ins
+  val pc  = fetchIssueBuffer.pc
+
+  // Storing values to the decode buffer
+  when(validOutFetchBuf === 1.U & readyOutDecodeBuf === 1.U) {
+    decodeIssueBuffer.instruction := ins
+    decodeIssueBuffer.PC := pc
+    decodeIssueBuffer.immediate := imm
+    decodeIssueBuffer.rs1 := rs1
+    decodeIssueBuffer.rs2 := Mux(ins(6, 2) === BitPat("b001?0"), imm, rs2)//rs2
+  }
+
   // Assigning outputs
-  decodeIssuePort.valid             := validOut
-  decodeIssuePort.bits.PC           := fetchIssueBuffer.PC
-  decodeIssuePort.bits.instruction  := fetchIssueBuffer.instruction
-  decodeIssuePort.bits.immediate    := immediate
-  decodeIssuePort.bits.rs1          := rs1Data
-  decodeIssuePort.bits.rs2          := rs2Data
-  decodeIssuePort.bits.predNextAddr := 0.U
-
-  fetchIssueIntfce.ready          := readyOut
-  fetchIssueIntfce.expected.PC    := expectedPC
-  fetchIssueIntfce.expected.valid := readyOut
-
-  branchResult.valid         := branchValid
-  branchResult.branchTaken   := branchIsTaken
-  branchResult.PC            := branchPC
-  branchResult.targetAddress := branchTarget
+  io.decodeIssuePort.bits.PC          := decodeIssueBuffer.PC
+  io.decodeIssuePort.bits.instruction := decodeIssueBuffer.instruction
+  io.decodeIssuePort.bits.immediate   := decodeIssueBuffer.immediate
+  io.decodeIssuePort.valid            := validOutDecodeBuf
+  io.decodeIssuePort.bits.rs1         := decodeIssueBuffer.rs1
+  io.decodeIssuePort.bits.rs2         := decodeIssueBuffer.rs2
+  io.fetchIssuePort.ready             := readyOutFetchBuf
+  io.decodeIssuePort.bits.opCode      := decodeIssueBuffer.instruction(6,0)
 
   // Deciding the instruction type
   switch (ins(6,0)) {
@@ -167,14 +142,75 @@ class DecodeUnit extends Module{
 
   // Calculating the immediate value
   switch (insType) {
-    is(itype.U) { immediate := Cat(Fill(53, ins(31)), ins(30, 20)) }
-    is(stype.U) { immediate := Cat(Fill(53, ins(31)), ins(30,25), ins(11, 7)) }
-    is(btype.U) { immediate := Cat(Fill(53, ins(31)), ins(7), ins(30,25), ins(11,8), 0.U(1.W)) }
-    is(utype.U) { immediate := Cat(Fill(32, ins(31)), ins(31,12), 0.U(12.W)) }
-    is(jtype.U) { immediate:= Cat(Fill(44, ins(31)), ins(19,12), ins(20), ins(30,25), ins(24,21), 0.U(1.W)) }
-    is(ntype.U) { immediate := Fill(64, 0.U) }
-    is(rtype.U) { immediate := Fill(64, 0.U) }
+    is(itype.U) { imm := Cat(Fill(53, ins(31)), ins(30, 20)) }
+    is(stype.U) { imm := Cat(Fill(53, ins(31)), ins(30,25), ins(11, 7)) }
+    is(btype.U) { imm := Cat(Fill(53, ins(31)), ins(7), ins(30,25), ins(11,8), 0.U(1.W)) }
+    is(utype.U) { imm := Cat(Fill(32, ins(31)), ins(31,12), 0.U(12.W)) }
+    is(jtype.U) { imm := Cat(Fill(44, ins(31)), ins(19,12), ins(20), ins(30,25), ins(24,21), 0.U(1.W)) }
+    is(ntype.U) { imm := Fill(64, 0.U) }
+    is(rtype.U) { imm := Fill(64, 0.U) }
   }
+
+  // FSM for ready valid interface
+  // ------------------------------------------------------------------------------------------------------------------ //
+  val emptyState :: fullState :: Nil = Enum(2) // States of FSM
+  val stateReg = RegInit(emptyState)
+
+  switch(stateReg) {
+    is(emptyState) {
+      validOutFetchBuf := 0.U
+      readyOutFetchBuf := 1.U
+      when(validIn === 1.U) {
+        stateReg := fullState
+      }
+    }
+    is(fullState) {
+      when(stalled === 1.U) {
+       validOutFetchBuf := 0.U
+       readyOutFetchBuf := 0.U
+      } otherwise {
+        validOutFetchBuf := 1.U
+        when(readyIn === 1.U) {
+          readyOutFetchBuf := 1.U
+          when(validIn === 0.U) {
+            stateReg := emptyState
+          }
+        } otherwise {
+          readyOutFetchBuf := 0.U
+        }
+      }
+    }
+  }
+  // ------------------------------------------------------------------------------------------------------------------ //
+
+  // Initializing states for the FSM of decode buffer
+  val emptyState2 :: fullState2 :: Nil = Enum(2) // States of FSM
+  val stateReg2 = RegInit(emptyState2)
+
+  // FSM for ready valid interface of decode buffer
+  // ------------------------------------------------------------------------------------------------------------------ //
+  switch(stateReg2) {
+    is(emptyState2) {
+      validOutDecodeBuf := 0.U
+      readyOutDecodeBuf := 1.U
+      when(validOutFetchBuf === 1.U) {
+        stateReg2 := fullState2
+      }
+    }
+    is(fullState2) {
+      validOutDecodeBuf := 1.U
+      when(readyIn === 1.U) {
+        readyOutDecodeBuf := 1.U
+        when(!validOutFetchBuf) {
+          stateReg2 := emptyState2
+        }
+      } otherwise {
+        readyOutDecodeBuf := 0.U
+      }
+    }
+  }
+  // ------------------------------------------------------------------------------------------------------------------ //
+
 
   // Valid bits for each register
   val validBit = RegInit(VecInit(Seq.fill(32)(1.U(1.W))))
@@ -184,105 +220,35 @@ class DecodeUnit extends Module{
   val registerFile = Reg(Vec(32, UInt(64.W)))
   registerFile(0) := 0.U
 
-  rs1Data := registerFile(ins(19, 15))
-  rs2Data := registerFile(ins(24, 20))
+  rs1 := registerFile(ins(19, 15))
+  rs2 := registerFile(ins(24, 20))
 
   // Register writing
-  when(writeEn === 1.U && validBit(writeRd) === 0.U && writeRd =/= 0.U) {
+  when(writeEn === 1.U & writeRd =/= 0.U & validBit(writeRd) === 0.U) {
     registerFile(writeRd) := writeData
     validBit(writeRd)     := 1.U
   }
 
   // Checking rs1 validity
-  when(insType === rtype.U || insType === itype.U || insType === stype.U || insType === btype.U) {
-    when(validBit(ins(19, 15)) === 0.U) { rs1Valid := false.B }
+  when(insType === rtype.U | insType === itype.U | insType === stype.U | insType === btype.U) {
+    when(validBit(ins(19, 15)) === 0.U) { rs1Valid := 0.U }
   }
   // Checking rs2 validity
-  when(insType === rtype.U || insType === stype.U || insType === btype.U) {
-    when(validBit(ins(24, 20)) === 0.U) { rs2Valid := false.B }
+  when(insType === rtype.U | insType === stype.U | insType === btype.U) {
+    when(validBit(ins(24, 20)) === 0.U) { rs2Valid := 0.U }
   }
   // Checking rd validity and changing the valid bit for rd
-  when(insType === rtype.U || insType === utype.U || insType === itype.U || insType === jtype.U) {
-    when(validBit(ins(11, 7)) === 0.U) { rdValid := false.B }
+  when(insType === rtype.U | insType === utype.U | insType === itype.U | insType === jtype.U) {
+    when(validBit(ins(11, 7)) === 0.U) { rdValid := 0.U }
     .otherwise {
-      when(validOut && readyIn  && ins(11, 7) =/= 0.U) { validBit(ins(11, 7)) := 0.U }
+      when(validOutFetchBuf === 1.U & readyIn === 1.U & ins(11, 7) =/= 0.U) {
+        validBit(ins(11, 7)) := 0.U
+      }
     }
   }
-
   when(stateReg === fullState) {
-    stalled := !(rdValid && rs1Valid && rs2Valid) // stall signal for FSM
+    stalled := ~(rdValid & rs1Valid & rs2Valid)     // stall signal for FSM
   }
-
-  // FSM for ready valid interface
-  // ------------------------------------------------------------------------------------------------------------------ //
-  switch(stateReg) {
-    is(emptyState) {
-      validOut := false.B
-      readyOut := true.B
-      when(validIn && fetchIssueIntfce.PC === fetchIssueIntfce.expected.PC) {
-        stateReg := fullState
-      }
-    }
-    is(fullState) {
-      when(stalled) {
-        validOut := false.B
-        readyOut := false.B
-      } otherwise {
-        validOut := true.B
-        when(readyIn) {
-          readyOut := true.B
-          when(!validIn || fetchIssueIntfce.PC =/= fetchIssueIntfce.expected.PC) {
-            stateReg := emptyState
-          }
-        } otherwise {
-          readyOut := false.B
-        }
-      }
-    }
-  }
-  // ------------------------------------------------------------------------------------------------------------------ //
-
-  // Branch handling
-  //  ------------------------------------------------------------------------------------------------------------------------------------------------------
-  val branch_detector = Module(new branch_detector)
-  branch_detector.io.instr := ins
-  isBranch := branch_detector.io.is_branch
-
-  def getResult(pattern: (chisel3.util.BitPat, chisel3.UInt), prev: UInt) = pattern match {
-    case (bitpat, result) => Mux(ins === bitpat, result, prev)
-  }
-
-  when(isBranch && !stalled) {
-    val branchTaken = (Seq(
-      rs1Data === rs2Data,
-      rs1Data =/= rs2Data,
-      rs1Data.asSInt < rs2Data.asSInt,
-      rs1Data.asSInt >= rs2Data.asSInt,
-      rs1Data < rs2Data,
-      rs1Data >= rs2Data
-    ).zip(Seq(0, 1, 4, 5, 6, 7).map(i => i.U === ins(14, 12))
-    ).map(condAndMatch => condAndMatch._1 && condAndMatch._2).reduce(_ || _))
-
-    val brachNextAddress = Mux(branchTaken, (pc + immediate), (pc + 4.U))
-
-    val target = Seq(
-      BitPat("b?????????????????????????1101111") -> (pc + immediate), // jal
-      BitPat("b?????????????????????????1100111") -> (rs1Data + immediate), //jalr
-      BitPat("b?????????????????????????1100011") -> brachNextAddress, // branches
-    ).foldRight((pc + 4.U))(getResult)
-
-    expectedPC := target
-    when(stateReg === fullState) {
-      branchValid := true.B
-    }
-    branchIsTaken := branchTaken
-    branchPC := pc
-    branchTarget := target
-  } otherwise {
-    expectedPC := pc + 4.U
-  }
-  //  -----------------------------------------------------------------------------------------------------------------------------------------------------------
-
 }
 
 object DECODE_ISSUE_UNIT extends App{

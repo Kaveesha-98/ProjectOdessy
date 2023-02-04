@@ -4,8 +4,42 @@ import chisel3._
 import chisel3.util._
 import chisel3.experimental.BundleLiterals._
 
+import common._
 import pipeline._
-import pipeline.ports._
+
+class DecodeIssuePort extends Bundle {
+    val PC          = UInt(64.W)
+    val instruction = UInt(32.W)
+    val rs1         = UInt(64.W)
+    val rs2         = UInt(64.W)
+    val immediate   = UInt(64.W)
+}
+
+class BranchResult extends Bundle {
+    val target = UInt(64.W)
+    val valid = Bool()
+}
+
+/**
+  * Functionality:
+  * Assuming no stall conditions arise. The input is combinationally processed
+  * in a single cycle. Then is presented to the memory unit. The outputs are
+  * directly driven by registers("aluIssueBuffer" in this case).
+  * 
+  * If a instruction presented to the memory unit is not accepted in the same
+  * cycle(stall) an instruction is accepted from decode unit then, the instruction is
+  * buffered. The instruction is not processed until the old is accepted by 
+  * memory unit. 
+  * 
+  * Instruction are processed and presented to memory unit in-order they're 
+  * accepted from the decode unit.
+  * 
+  * Branch are results are broadcasted to fetch unit in the next cycle after it
+  * is accepted from decode.
+  * 
+  * aluTemplate codifies the above information. Exact implmentation of instructions
+  * are given by alu module.
+  */
 
 abstract class aluTemplate extends Module {
     val decodeIssuePort = IO(new handshake(new DecodeIssuePort()))
@@ -15,84 +49,60 @@ abstract class aluTemplate extends Module {
     def getsWriteBack(recievedIns: DecodeIssuePort): AluIssuePort
     def resolveBranch(recievedIns: DecodeIssuePort): BranchResult
 
-    val passThrough :: waitOnMem :: execBuffIns :: flush :: Nil = Enum(4)
-    val stateReg = RegInit(passThrough)
-
-    /**
-      * If memory unit is not ready or there are currently no instruction
-      * being presented on aluIssuePort, then the instruction accepted in 
-      * this cycle must be buffered.
-      */
-    val aluIssueValid = RegInit(false.B)
-    val bufferdInstruction = Reg(new DecodeIssuePort())
-    val buffered = RegInit(false.B)
-    when(stateReg === passThrough && (!aluIssuePort.ready || aluIssueValid)){
-        bufferdInstruction := decodeIssuePort.bits
-        buffered := true.B
-    }
-    when (stateReg === execBuffIns) { buffered := false.B }
-
-    /**
-      * Instruction is passed through either the buffered instruction(priority)
-      * or the instruction on the docodeIssuePort
-      */
-    val issuePortBits = Reg(new AluIssuePort())
-    when(stateReg =/= waitOnMem && (aluIssuePort.ready || !aluIssueValid)) {
-        issuePortBits := getsWriteBack(Mux(stateReg === passThrough, decodeIssuePort.bits, bufferdInstruction))
-    }
-
-    /**
-      * Branch results are broadcasted in the next
-      * cycle to the decode and fetch units
-      */
-    val branchResultDriver = RegInit((new BranchResult).Lit(
+    val decodeIssueBuffer = RegInit(new Bundle{
+        val valid   = Bool()
+        val bits    = (new DecodeIssuePort())
+    }.Lit(
         _.valid -> false.B,
-        _.nextInstPtr -> 0.U,
-        _.PC -> 0.U,
-        _.predicted -> false.B,
-        _.isBranch -> false.B,
-        _.branchTaken -> false.B
-        ))
-    val branchResolvedResults = resolveBranch(decodeIssuePort.bits)
-    when(stateReg === passThrough) {
-        branchResultDriver := branchResolvedResults
-    }.otherwise {
-        branchResultDriver.valid := false.B
+        _.bits.PC -> 0.U,
+        _.bits.instruction -> 0.U,
+        _.bits.rs1 -> 0.U,
+        _.bits.rs2 -> 0.U,
+        _.bits.immediate -> 0.U
+    ))
+
+    val aluIssueBuffer = RegInit(new Bundle{
+        val valid   = Bool()
+        val bits    = (new AluIssuePort())
+    }.Lit(
+        _.valid -> false.B,
+        _.bits.nextInstPtr -> 0.U,
+        _.bits.instruction -> 0.U,
+        _.bits.aluResult -> 0.U,
+        _.bits.rs2 -> 0.U
+    ))
+
+    // no instructions are accepted while there is a buffered instruction
+    decodeIssuePort.ready := !decodeIssueBuffer.valid
+
+    // an instruction is buffered if the older instruction is not yet accepted by the memory access unit
+    when((decodeIssuePort.ready && decodeIssuePort.valid) && (aluIssuePort.valid && !aluIssuePort.ready)) {
+        decodeIssueBuffer.bits  := decodeIssuePort.bits
+        decodeIssueBuffer.valid := true.B
+    }.elsewhen(decodeIssueBuffer.valid && aluIssuePort.valid && aluIssuePort.ready) {
+        // older instruction was accepted by memory unit, processing the buffered instruction
+        decodeIssueBuffer.valid := false.B
+    }
+    // buffered instruction is given priority
+    val processingEntry = Mux(decodeIssueBuffer.valid, decodeIssueBuffer.bits, decodeIssuePort.bits) 
+
+    val entryValid = decodeIssueBuffer.valid || decodeIssuePort.valid
+
+    when(entryValid && (!aluIssueBuffer.valid || aluIssuePort.ready)) {
+        // either the old instruction was accepted, or no old instruction
+        aluIssueBuffer.bits := getsWriteBack(processingEntry)
+        aluIssueBuffer.valid := true.B
+    }.elsewhen(!entryValid && (aluIssuePort.valid && aluIssuePort.ready)) {
+        aluIssueBuffer.valid := false.B
     }
 
-    /**
-      * aluIssuePort.valid must not be deasserted before an instruction is accepted.
-      * aluIssuePort.{valid and ready} are both asserted only one cycle for each intruction
-      * presented on decodeIssuePort.
-      * aluIssuePort.valid must be asserted at least one cycle for each instruction presented
-      * on decodeIssuePort.
-      */
-    switch(stateReg){
-        is(passThrough) {when((!aluIssueValid || aluIssuePort.ready)){ aluIssueValid := decodeIssuePort.valid }}
-        is(execBuffIns)  {aluIssueValid := true.B}
-    }
+    aluIssuePort.valid := aluIssueBuffer.valid
+    aluIssuePort.bits   := aluIssueBuffer.bits
 
-    /**
-      * Discard the next instruction if prediction from fetch unit is incorrect.
-      * Stall if in the same cycle a instruction is accepted from decode and was
-      * not able to send one to memory unit.
-      * WaitOnMem state will only happen if an instruction is buffered.
-      * Flush is only one cycle. After that cycle instructions are correct.
-      */
-    switch(stateReg) {
-        is(passThrough) { 
-            when(decodeIssuePort.valid && !branchResolvedResults.predicted && aluIssuePort.ready) { stateReg := flush } 
-            .elsewhen(decodeIssuePort.valid && !aluIssuePort.ready && aluIssueValid) { stateReg := waitOnMem }
-        }
-        is(waitOnMem)   { when(aluIssuePort.ready){ stateReg := execBuffIns }}
-        is(execBuffIns) { stateReg := passThrough }
-        is(flush) { stateReg := Mux(buffered, execBuffIns, passThrough) }
-    }
+    val branchResultDriver = RegInit((new BranchResult).Lit(_.target -> 0.U, _.valid -> false.B))
+    branchResultDriver := resolveBranch(decodeIssuePort.bits)
 
-    aluIssuePort.bits := issuePortBits
-    aluIssuePort.valid := aluIssueValid
     branchResult := branchResultDriver
-    decodeIssuePort.ready := stateReg === passThrough
 }
 
 class alu extends aluTemplate {
@@ -110,42 +120,48 @@ class alu extends aluTemplate {
         val rs1 = recievedIns.rs1
         val rs2 = recievedIns.rs2
 
-        result.aluResult := Seq(
-            BitPat("b?????????????????????????0110111") -> immediate, // lui
-            BitPat("b?????????????????????????0010111") -> (immediate + pc), // auipc
-            BitPat("b?????????????????????????1101111") -> (pc + 4.U), // jal
-            BitPat("b?????????????????????????1100111") -> (pc + 4.U), //jalr
-            BitPat("b?????????????????????????0?00011") -> (rs1 + immediate), // loads and stores
-            BitPat("b?????????????????000?????0010011") -> (rs1 + immediate), // addi
-            BitPat("b?????????????????010?????0010011") -> (rs1.asSInt < immediate.asSInt).asUInt, // slti
-            BitPat("b?????????????????011?????0010011") -> (rs1 < immediate).asUInt, // sltiu
-            BitPat("b?????????????????100?????0010011") -> (rs1 ^ immediate), // xori
-            BitPat("b?????????????????110?????0010011") -> (rs1 | immediate), // ori
-            BitPat("b?????????????????111?????0010011") -> (rs1 & immediate), // andi
-            BitPat("b000000???????????001?????0010011") -> (rs1 << immediate(5, 0)), // slli
-            BitPat("b000000???????????101?????0010011") -> (rs1 >> immediate(5, 0)), // srli
-            BitPat("b010000???????????101?????0010011") -> (rs1.asSInt >> immediate(5, 0)).asUInt, // srai
-            BitPat("b0000000??????????000?????0110011") -> (rs1 + rs2), // add
-            BitPat("b0100000??????????000?????0110011") -> (rs1 - rs2), // sub
-            BitPat("b0000000??????????001?????0110011") -> (rs1 << rs2(5, 0)), // sll
-            BitPat("b0000000??????????010?????0110011") -> (rs1.asSInt < rs2.asSInt), // slt
-            BitPat("b0000000??????????011?????0110011") -> (rs1 < rs2), // sltu
-            BitPat("b0000000??????????100?????0110011") -> (rs1 ^ rs2), // xor
-            BitPat("b0000000??????????101?????0110011") -> (rs1 >> rs2), // srl
-            BitPat("b0100000??????????101?????0110011") -> (rs1.asSInt >> rs2(5, 0)).asUInt, // sra
-            BitPat("b0000000??????????110?????0110011") -> (rs1 | rs2), // or
-            BitPat("b0000000??????????111?????0110011") -> (rs1 & rs2), // and
-            BitPat("b?????????????????000?????0011011") -> result32bit(rs1 + immediate), // addiw
-            BitPat("b0000000??????????001?????0011011") -> result32bit(rs1 << immediate(4, 0)), // slliw
-            BitPat("b0000000??????????101?????0011011") -> result32bit(rs1(31, 0) >> immediate(4, 0)), // srliw
-            BitPat("b0100000??????????101?????0011011") -> result32bit((rs1(31, 0).asSInt >> immediate(4, 0)).asUInt), // sraiw
-            BitPat("b0000000??????????000?????0111011") -> result32bit(rs1 + rs2), // addw
-            BitPat("b0100000??????????000?????0111011") -> result32bit(rs1 - rs2), // subw
-            BitPat("b0000000??????????001?????0111011") -> result32bit(rs1(31, 0) << rs2(4, 0)), // sllw
-            BitPat("b0000000??????????101?????0111011") -> result32bit(rs1(31, 0) >> rs2), // srlw
-            BitPat("b0100000??????????101?????0111011") -> result32bit((rs1(31, 0).asSInt >> rs2(4, 0)).asUInt)// sraw
-        ).foldRight(0.U(64.W))(getResult)
+        /**
+          * For aithmatic operations that includes immedaite, rs2 will have that immediate.
+          */
 
+        result.aluResult := {
+            /**
+              * 64 bit operations, indexed with funct3, op-imm, op
+              */
+            val arithmetic64 = VecInit.tabulate(8)(i => i match {
+                case 0 => Mux(Cat(recievedIns.instruction(30), recievedIns.instruction(5)) === "b11".U, rs1 - rs2, rs1 + rs2)
+                case 1 => (rs1 << rs2(5, 0))
+                case 2 => (rs1.asSInt < rs2.asSInt).asUInt
+                case 3 => (rs1 < rs2).asUInt
+                case 4 => (rs1 ^ rs2)
+                case 5 => Mux(recievedIns.instruction(30).asBool, (rs1.asSInt >> rs2(5, 0)).asUInt, (rs1 >> rs2(5, 0)))
+                case 6 => (rs1 | rs2)
+                case 7 => (rs1 & rs2)
+            })(recievedIns.instruction(14, 12))
+
+            /**
+              * 32 bit operations, indexed with funct3, op-imm-32, op-32
+              */
+            val arithmetic32 = VecInit.tabulate(4)(i => i match {
+                case 0 => Mux(Cat(recievedIns.instruction(30), recievedIns.instruction(5)) === "b11".U, result32bit(rs1 - rs2), result32bit(rs1 + rs2)) // add & sub
+                case 1 => (result32bit(rs1 << rs2(4, 0))) // sll\iw
+                case 2 => (result32bit(rs1 << rs2(4, 0))) // filler
+                case 3 => Mux(recievedIns.instruction(30).asBool, result32bit((rs1(31, 0).asSInt >> rs2(4, 0)).asUInt), result32bit(rs1(31, 0) >> rs2(4, 0))) // sra\l\iw
+            })(Cat(recievedIns.instruction(14), recievedIns.instruction(12)))
+
+            /**
+              * Taken from register mapping in the instruction listing risc-spec
+              */
+            VecInit.tabulate(7)(i => i match {
+                case 0 => (rs1 + immediate) // address calculation for memory access
+                case 1 => (pc + 4.U) // jal link address
+                case 2 => (pc + 4.U) //(63, 0) // filler
+                case 3 => (pc + 4.U) //(63, 0) jalr link address
+                case 4 => arithmetic64 // (63, 0) op-imm, op
+                case 5 => (immediate + Mux(recievedIns.instruction(5).asBool, 0.U, pc)) // (63, 0) // lui and auipc
+                case 6 => arithmetic32 // op-32, op-imm-32
+            })(recievedIns.instruction(4, 2))
+        }
         val branchTaken = (Seq(
             rs1 === rs2,
             rs1 =/= rs2,
@@ -177,7 +193,6 @@ class alu extends aluTemplate {
         val pc = recievedIns.PC
         val rs1 = recievedIns.rs1
         val rs2 = recievedIns.rs2
-        val predNextAddr = recievedIns.predNextAddr
 
         val branchTaken = (Seq(
             rs1 === rs2,
@@ -191,20 +206,13 @@ class alu extends aluTemplate {
 
         val brachNextAddress = Mux(branchTaken, (pc + immediate), (pc + 4.U))
 
-        val nextInstPtr = Seq(
+        result.target := Seq(
             BitPat("b?????????????????????????1101111") -> (pc + immediate), // jal
             BitPat("b?????????????????????????1100111") -> (rs1 + immediate), //jalr
             BitPat("b?????????????????????????1100011") -> brachNextAddress, // branches
         ).foldRight((pc + 4.U))(getResult)
 
-        result.nextInstPtr := nextInstPtr
-        result.PC := pc
-        result.predicted := nextInstPtr === predNextAddr
-        result.isBranch := recievedIns.instruction(6, 0) === BitPat("b110??11")
-        result.branchTaken := branchTaken
-
-        result.valid := decodeIssuePort.valid && (recievedIns.instruction(6, 0) === BitPat("b110??11") || 
-            nextInstPtr =/= predNextAddr)
+        result.valid := recievedIns.instruction(6, 0) === BitPat("b110??11") && ((decodeIssuePort.ready && decodeIssuePort.valid)) 
         result 
     }
 }

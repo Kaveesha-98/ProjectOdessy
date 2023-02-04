@@ -1,5 +1,5 @@
 
-/* package pipeline.alu
+package pipeline.alu
 
 import chisel3._
 import chisel3.util._
@@ -150,4 +150,4 @@ class cpuTestbench extends Module {
 
 object cpuTestbench extends App {
     (new stage.ChiselStage).emitVerilog(new cpuTestbench)
-} */
+}
