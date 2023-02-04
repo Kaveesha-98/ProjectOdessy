@@ -20,8 +20,8 @@ class branch_detector extends Module {
   val op1       = io.instr(6,5)
   val op2       = io.instr(4,2)
   val flag1     = op1 === "b11".U
-  val flag2     = op2 === "b001".U | op2 === "b011".U | op2 === "b000".U
-  io.is_branch :=  flag1 & flag2
+  val flag2     = op2 === "b001".U || op2 === "b011".U || op2 === "b000".U
+  io.is_branch :=  flag1 && flag2
 }
 
 /**
@@ -116,55 +116,19 @@ class DecodeUnit extends Module{
   val branchPC      = WireDefault(0.U(64.W)) // Address of the branch instruction
   val branchTarget  = WireDefault(0.U(64.W)) // Next address of the instruction after the branch
 
+  // Initializing states for the FSM
+  val emptyState :: fullState :: Nil = Enum(2) // States of FSM
+  val stateReg = RegInit(emptyState)
+
   // Storing instruction and PC in a buffer
-  when(validIn & readyOut & fetchIssueIntfce.expected.PC === fetchIssueIntfce.PC) {
+  when(validIn && readyOut && fetchIssueIntfce.expected.PC === fetchIssueIntfce.PC) {
     fetchIssueBuffer.instruction := fetchIssueIntfce.instruction
     fetchIssueBuffer.PC          := fetchIssueIntfce.PC
   }
 
   ins := fetchIssueBuffer.instruction
   val pc  = fetchIssueBuffer.PC
-
-  //  ------------------------------------------------------------------------------------------------------------------------------------------------------
-
-  val branch_detector       = Module(new branch_detector)
-  branch_detector.io.instr := ins
-  isBranch                 := branch_detector.io.is_branch
-
-  def getResult(pattern: (chisel3.util.BitPat, chisel3.UInt), prev: UInt) = pattern match {
-    case (bitpat, result) => Mux(ins === bitpat, result, prev)
-  }
-
-  when(isBranch & stalled =/= 1.U) {
-    val branchTaken = (Seq(
-      rs1Data === rs2Data,
-      rs1Data =/= rs2Data,
-      rs1Data.asSInt < rs2Data.asSInt,
-      rs1Data.asSInt >= rs2Data.asSInt,
-      rs1Data < rs2Data,
-      rs1Data >= rs2Data
-    ).zip(Seq(0, 1, 4, 5, 6, 7).map(i => i.U === ins(14, 12))
-    ).map(condAndMatch => condAndMatch._1 && condAndMatch._2).reduce(_ || _))
-
-    val brachNextAddress = Mux(branchTaken, (pc + immediate), (pc + 4.U))
-
-    val target = Seq(
-      BitPat("b?????????????????????????1101111") -> (pc + immediate), // jal
-      BitPat("b?????????????????????????1100111") -> (rs1Data + immediate), //jalr
-      BitPat("b?????????????????????????1100011") -> brachNextAddress, // branches
-    ).foldRight((pc + 4.U))(getResult)
-
-    expectedPC := target
-    branchValid := true.B
-    branchIsTaken := branchTaken
-    branchPC := pc
-    branchTarget := target
-  } otherwise {
-    expectedPC := pc + 4.U
-  }
-
-  //  -----------------------------------------------------------------------------------------------------------------------------------------------------------
-
+  
   // Assigning outputs
   decodeIssuePort.valid             := validOut
   decodeIssuePort.bits.PC           := fetchIssueBuffer.PC
@@ -212,38 +176,6 @@ class DecodeUnit extends Module{
     is(rtype.U) { immediate := Fill(64, 0.U) }
   }
 
-  // FSM for ready valid interface
-  // ------------------------------------------------------------------------------------------------------------------ //
-  val emptyState :: fullState :: Nil = Enum(2) // States of FSM
-  val stateReg = RegInit(emptyState)
-
-  switch(stateReg) {
-    is(emptyState) {
-      validOut := false.B
-      readyOut := true.B
-      when(validIn & fetchIssueIntfce.PC === fetchIssueIntfce.expected.PC) {
-        stateReg := fullState
-      }
-    }
-    is(fullState) {
-      when(stalled) {
-        validOut := false.B
-        readyOut := false.B
-      } otherwise {
-        validOut := true.B
-        when(readyIn) {
-          readyOut := true.B
-          when( validIn === false.B | fetchIssueIntfce.PC =/= fetchIssueIntfce.expected.PC) {
-            stateReg := emptyState
-          }
-        } otherwise {
-          readyOut := false.B
-        }
-      }
-    }
-  }
-  // ------------------------------------------------------------------------------------------------------------------ //
-
   // Valid bits for each register
   val validBit = RegInit(VecInit(Seq.fill(32)(1.U(1.W))))
   validBit(0) := 1.U
@@ -256,30 +188,100 @@ class DecodeUnit extends Module{
   rs2Data := registerFile(ins(24, 20))
 
   // Register writing
-  when(writeEn === 1.U & validBit(writeRd) === 0.U & writeRd =/= 0.U) {
+  when(writeEn === 1.U && validBit(writeRd) === 0.U && writeRd =/= 0.U) {
     registerFile(writeRd) := writeData
     validBit(writeRd)     := 1.U
   }
 
   // Checking rs1 validity
-  when(insType === rtype.U | insType === itype.U | insType === stype.U | insType === btype.U) {
+  when(insType === rtype.U || insType === itype.U || insType === stype.U || insType === btype.U) {
     when(validBit(ins(19, 15)) === 0.U) { rs1Valid := false.B }
   }
   // Checking rs2 validity
-  when(insType === rtype.U | insType === stype.U | insType === btype.U) {
+  when(insType === rtype.U || insType === stype.U || insType === btype.U) {
     when(validBit(ins(24, 20)) === 0.U) { rs2Valid := false.B }
   }
   // Checking rd validity and changing the valid bit for rd
-  when(insType === rtype.U | insType === utype.U | insType === itype.U | insType === jtype.U) {
+  when(insType === rtype.U || insType === utype.U || insType === itype.U || insType === jtype.U) {
     when(validBit(ins(11, 7)) === 0.U) { rdValid := false.B }
     .otherwise {
-      when(validOut & readyIn  & ins(11, 7) =/= 0.U) { validBit(ins(11, 7)) := 0.U }
+      when(validOut && readyIn  && ins(11, 7) =/= 0.U) { validBit(ins(11, 7)) := 0.U }
     }
   }
 
   when(stateReg === fullState) {
-    stalled := ~(rdValid & rs1Valid & rs2Valid) // stall signal for FSM
+    stalled := !(rdValid && rs1Valid && rs2Valid) // stall signal for FSM
   }
+
+  // FSM for ready valid interface
+  // ------------------------------------------------------------------------------------------------------------------ //
+  switch(stateReg) {
+    is(emptyState) {
+      validOut := false.B
+      readyOut := true.B
+      when(validIn && fetchIssueIntfce.PC === fetchIssueIntfce.expected.PC) {
+        stateReg := fullState
+      }
+    }
+    is(fullState) {
+      when(stalled) {
+        validOut := false.B
+        readyOut := false.B
+      } otherwise {
+        validOut := true.B
+        when(readyIn) {
+          readyOut := true.B
+          when(!validIn || fetchIssueIntfce.PC =/= fetchIssueIntfce.expected.PC) {
+            stateReg := emptyState
+          }
+        } otherwise {
+          readyOut := false.B
+        }
+      }
+    }
+  }
+  // ------------------------------------------------------------------------------------------------------------------ //
+
+  // Branch handling
+  //  ------------------------------------------------------------------------------------------------------------------------------------------------------
+  val branch_detector = Module(new branch_detector)
+  branch_detector.io.instr := ins
+  isBranch := branch_detector.io.is_branch
+
+  def getResult(pattern: (chisel3.util.BitPat, chisel3.UInt), prev: UInt) = pattern match {
+    case (bitpat, result) => Mux(ins === bitpat, result, prev)
+  }
+
+  when(isBranch && !stalled) {
+    val branchTaken = (Seq(
+      rs1Data === rs2Data,
+      rs1Data =/= rs2Data,
+      rs1Data.asSInt < rs2Data.asSInt,
+      rs1Data.asSInt >= rs2Data.asSInt,
+      rs1Data < rs2Data,
+      rs1Data >= rs2Data
+    ).zip(Seq(0, 1, 4, 5, 6, 7).map(i => i.U === ins(14, 12))
+    ).map(condAndMatch => condAndMatch._1 && condAndMatch._2).reduce(_ || _))
+
+    val brachNextAddress = Mux(branchTaken, (pc + immediate), (pc + 4.U))
+
+    val target = Seq(
+      BitPat("b?????????????????????????1101111") -> (pc + immediate), // jal
+      BitPat("b?????????????????????????1100111") -> (rs1Data + immediate), //jalr
+      BitPat("b?????????????????????????1100011") -> brachNextAddress, // branches
+    ).foldRight((pc + 4.U))(getResult)
+
+    expectedPC := target
+    when(stateReg === fullState) {
+      branchValid := true.B
+    }
+    branchIsTaken := branchTaken
+    branchPC := pc
+    branchTarget := target
+  } otherwise {
+    expectedPC := pc + 4.U
+  }
+  //  -----------------------------------------------------------------------------------------------------------------------------------------------------------
 
 }
 
