@@ -13,3 +13,4 @@ project/
 target/
 obj_dir/
 cpu-test/cpuTestbench
+!cpu-test/cpuTestbench.v
