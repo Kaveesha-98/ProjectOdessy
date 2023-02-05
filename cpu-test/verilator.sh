@@ -1,6 +1,6 @@
 #! /bin/sh
 cd ..
-sbt "runMain pipeline.alu.axi_cpu_wrapper"
+sbt "runMain pipeline.axi_cpu_wrapper"
 
 cd cpu-test
 
