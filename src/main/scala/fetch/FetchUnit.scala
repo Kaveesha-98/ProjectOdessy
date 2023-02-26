@@ -51,7 +51,7 @@ class FetchUnit(val pc_reset_val: Int, val fifo_size: Int) extends Module {
 
   })
   //register defs
-  val PC = RegInit("h80000000".U(64.W))
+  val PC = RegInit("h00100000".U(64.W))
   val IR = RegInit(0.U(32.W))
   val internal_stall = RegInit(0.U(1.W))
   val IR_valid = RegInit(0.U(1.W))

@@ -109,7 +109,7 @@ class channel_d(
     val w : Int = 8,
 ) extends Bundle {
     val opcode  = Input(UInt(3.W))
-    val param   = Input(UInt(2.W))
+    val param   = Input(UInt(3.W))
     val size    = Input(UInt(z.W))
     val source  = Input(UInt(o.W))
     val sink    = Input(UInt(i.W))
