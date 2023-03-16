@@ -49,6 +49,16 @@ abstract class aluTemplate extends Module {
     def getsWriteBack(recievedIns: DecodeIssuePort): AluIssuePort
     def resolveBranch(recievedIns: DecodeIssuePort): BranchResult
 
+    val mulReqValid = RegInit(false.B)
+    def isExtnM(instruction: UInt) = (instruction(31, 25) === 1.U) && (instruction(6, 2) === BitPat("b011?0"))
+
+    val mulDivUnit = Module(new mExten)
+
+    when(!mulReqValid) {
+        mulReqValid := decodeIssuePort.valid && decodeIssuePort.ready && isExtnM(decodeIssuePort.bits.instruction)}.otherwise {mulReqValid := !mulDivUnit.input.ready}
+
+    mulDivUnit.input.valid := mulReqValid
+
     val decodeIssueBuffer = RegInit(new Bundle{
         val valid   = Bool()
         val bits    = (new DecodeIssuePort())
@@ -60,6 +70,10 @@ abstract class aluTemplate extends Module {
         _.bits.rs2 -> 0.U,
         _.bits.immediate -> 0.U
     ))
+
+    mulDivUnit.input.bits.instruction := decodeIssueBuffer.bits.instruction
+    mulDivUnit.input.bits.src1 := decodeIssueBuffer.bits.rs1
+    mulDivUnit.input.bits.src2 := decodeIssueBuffer.bits.rs2
 
     val aluIssueBuffer = RegInit(new Bundle{
         val valid   = Bool()
@@ -76,11 +90,16 @@ abstract class aluTemplate extends Module {
     decodeIssuePort.ready := !decodeIssueBuffer.valid
 
     // an instruction is buffered if the older instruction is not yet accepted by the memory access unit
-    when((decodeIssuePort.ready && decodeIssuePort.valid) && (aluIssuePort.valid && !aluIssuePort.ready)) {
+    when((decodeIssuePort.ready && decodeIssuePort.valid && !isExtnM(decodeIssuePort.bits.instruction)) && (aluIssuePort.valid && !aluIssuePort.ready)) {
         decodeIssueBuffer.bits  := decodeIssuePort.bits
         decodeIssueBuffer.valid := true.B
-    }.elsewhen(decodeIssueBuffer.valid && aluIssuePort.valid && aluIssuePort.ready) {
+    }.elsewhen(decodeIssueBuffer.valid && aluIssuePort.valid && aluIssuePort.ready && !isExtnM(decodeIssueBuffer.bits.instruction)) {
         // older instruction was accepted by memory unit, processing the buffered instruction
+        decodeIssueBuffer.valid := false.B
+    }.elsewhen(!decodeIssueBuffer.valid && isExtnM(decodeIssuePort.bits.instruction) && decodeIssuePort.valid) {
+        decodeIssueBuffer.bits  := decodeIssuePort.bits
+        decodeIssueBuffer.valid := true.B
+    }.elsewhen(decodeIssueBuffer.valid && mulDivUnit.output.valid && isExtnM(decodeIssueBuffer.bits.instruction) && (!aluIssueBuffer.valid || aluIssuePort.ready)) {
         decodeIssueBuffer.valid := false.B
     }
     // buffered instruction is given priority
@@ -88,13 +107,23 @@ abstract class aluTemplate extends Module {
 
     val entryValid = decodeIssueBuffer.valid || decodeIssuePort.valid
 
-    when(entryValid && (!aluIssueBuffer.valid || aluIssuePort.ready)) {
+    when(entryValid && (!aluIssueBuffer.valid || aluIssuePort.ready) && !isExtnM(processingEntry.instruction)) {
         // either the old instruction was accepted, or no old instruction
         aluIssueBuffer.bits := getsWriteBack(processingEntry)
         aluIssueBuffer.valid := true.B
     }.elsewhen(!entryValid && (aluIssuePort.valid && aluIssuePort.ready)) {
         aluIssueBuffer.valid := false.B
+    }.elsewhen(entryValid && (!aluIssueBuffer.valid || aluIssuePort.ready) && isExtnM(decodeIssueBuffer.bits.instruction) && mulDivUnit.output.valid) {
+        aluIssueBuffer.valid := true.B
+        aluIssueBuffer.bits.nextInstPtr := decodeIssueBuffer.bits.PC + 4.U
+        aluIssueBuffer.bits.instruction := decodeIssueBuffer.bits.instruction
+        aluIssueBuffer.bits.rs2 := decodeIssueBuffer.bits.rs2
+        aluIssueBuffer.bits.aluResult := mulDivUnit.output.bits
+    }.elsewhen((!aluIssueBuffer.valid || aluIssuePort.ready) && (decodeIssuePort.valid && decodeIssuePort.ready && isExtnM(decodeIssuePort.bits.instruction))) {
+        aluIssueBuffer.valid := false.B
     }
+
+    mulDivUnit.output.ready := (!aluIssueBuffer.valid || aluIssuePort.ready) && isExtnM(decodeIssueBuffer.bits.instruction) && decodeIssueBuffer.valid
 
     aluIssuePort.valid := aluIssueBuffer.valid
     aluIssuePort.bits   := aluIssueBuffer.bits
@@ -138,6 +167,7 @@ class alu extends aluTemplate {
                 case 6 => (rs1 | rs2)
                 case 7 => (rs1 & rs2)
             })(recievedIns.instruction(14, 12))
+            val result64 = Mux(isExtnM(recievedIns.instruction), mulDivUnit.output.bits, arithmetic64)
 
             /**
               * 32 bit operations, indexed with funct3, op-imm-32, op-32
@@ -148,6 +178,7 @@ class alu extends aluTemplate {
                 case 2 => (result32bit(rs1 << rs2(4, 0))) // filler
                 case 3 => Mux(recievedIns.instruction(30).asBool, result32bit((rs1(31, 0).asSInt >> rs2(4, 0)).asUInt), result32bit(rs1(31, 0) >> rs2(4, 0))) // sra\l\iw
             })(Cat(recievedIns.instruction(14), recievedIns.instruction(12)))
+            val result32 = Mux(isExtnM(recievedIns.instruction), mulDivUnit.output.bits, arithmetic32)
 
             /**
               * Taken from register mapping in the instruction listing risc-spec
@@ -157,9 +188,9 @@ class alu extends aluTemplate {
                 case 1 => (pc + 4.U) // jal link address
                 case 2 => (pc + 4.U) //(63, 0) // filler
                 case 3 => (pc + 4.U) //(63, 0) jalr link address
-                case 4 => arithmetic64 // (63, 0) op-imm, op
+                case 4 => result64 // (63, 0) op-imm, op
                 case 5 => (immediate + Mux(recievedIns.instruction(5).asBool, 0.U, pc)) // (63, 0) // lui and auipc
-                case 6 => arithmetic32 // op-32, op-imm-32
+                case 6 => result32 // op-32, op-imm-32
             })(recievedIns.instruction(4, 2))
         }
         val branchTaken = (Seq(
