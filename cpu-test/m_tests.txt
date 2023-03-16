@@ -1,0 +1,13 @@
+a-div
+a-divu
+a-divuw
+a-divw
+a-mul
+a-mulh
+a-mulhsu
+a-mulhu
+a-mulw
+a-rem
+a-remu
+a-remuw
+a-remw
