@@ -39,43 +39,85 @@ class mExten extends Module {
 
   when(input.valid && input.ready) {
 
-    switch(input.bits.instruction(6,0)){
-      is(m32.U){
+    switch(input.bits.instruction(3).asBool){
+      is(true.B){
         switch(input.bits.instruction(14,12)){
-          is (0.U){                             //mul
-            val multiplierS32_1  = Module(new booth_multiplier_S(32))  //Signed 32 bit multiplier for mul
-            multiplierS32_1.io.multiplier    := input.bits.src1.asSInt
-            multiplierS32_1.io.multiplicand  := input.bits.src2.asSInt
-            int_result                    := multiplierS32_1.io.product(31,0).asUInt
+          is (0.U){                             //mulw
+            multiplierS32.io.multiplier    := input.bits.src1(31,0).asSInt
+            multiplierS32.io.multiplicand  := input.bits.src2(31,0).asSInt
+            int_result                    := Cat(Seq.fill(32)(multiplierS32.io.product(31)),multiplierS32.io.product(31,0))
           }
-          is (1.U){                             //mulh
-            val multiplierS32_2  = Module(new booth_multiplier_S(32))  //Signed 32 bit multiplier for mulh
-            multiplierS32_2.io.multiplier    := input.bits.src1.asSInt
-            multiplierS32_2.io.multiplicand  := input.bits.src2.asSInt
-            int_result                    := multiplierS32_2.io.product(63,32).asUInt
-          }
-          is (2.U){                             //mulhsu - Yet to be implemented
-            multiplier64.io.multiplier    := input.bits.src1.asSInt
-            multiplier64.io.multiplicand  := input.bits.src2.asSInt
-            int_result                    := multiplier64.io.product(63,32).asUInt
-          }
-          is (3.U){                             //mulhu
-            multiplierU32.io.multiplier    := input.bits.src1
-            multiplierU32.io.multiplicand  := input.bits.src2
-            int_result                    := multiplierU32.io.product(63,32)
-          }
-          is (4.U){                             //div
-            val dividerS32     = Module(new booth_divider_S(32))
-            dividerS32.io.dividend    := input.bits.src1
-            dividerS32.io.divisor     := input.bits.src2
+          is (4.U){                             //divw
+            dividerS32.io.dividend    := input.bits.src1(31,0).asSInt
+            dividerS32.io.divisor     := input.bits.src2(31,0).asSInt
             dividerS32.io.signed      := 1.U
-            int_result                := dividerS32.io.quotient
+            int_result                := Cat(Seq.fill(32)dividerS32.io.quotient(31),dividerS32.io.quotient(31,0))
+          }
+          is (5.U){                              //divuw
+            dividerU32.io.dividend    := input.bits.src1(31,0)
+            dividerU32.io.divisor     := input.bits.src2(31,0)
+            dividerU32.io.signed      := 0.U
+            int_result                := Cat(Seq.fill(32)dividerU32.io.quotient(31),dividerU32.io.quotient(31,0))
+          }
+          is (6.U){                             //remw
+            dividerS32.io.dividend    := input.bits.src1(31,0).asSInt
+            dividerS32.io.divisor     := input.bits.src2(31,0).asSInt
+            dividerS32.io.signed      := 1.U
+            int_result                := Cat(Seq.fill(32)dividerS32.io.remainder(31),dividerS32.io.remainder(31,0))
+          }
+          is (7.U){                             //remuw
+            dividerU32.io.dividend    := input.bits.src1(31,0)
+            dividerU32.io.divisor     := input.bits.src2(31,0)
+            dividerU32.io.signed      := 0.U
+            int_result                := Cat(Seq.fill(32)dividerU32.io.remainder(31),dividerU32.io.remainder(31,0))
           }
         }
-
       }
-      is(m64.U){
 
+      is(false.B){
+        switch(input.bits.instruction(14,12)){
+          is (0.U){                             //mul
+            multiplierS64.io.multiplier    := input.bits.src1.asSInt
+            multiplierS64.io.multiplicand  := input.bits.src2.asSInt
+            int_result                    := multiplierS32.io.product(63,0)
+          }
+          is (1.U){                              //mulh
+            multiplierS64.io.multiplier    := input.bits.src1.asSInt
+            multiplierS64.io.multiplicand  := input.bits.src2.asSInt
+            int_result                    := multiplierS32.io.product(127,64)
+          }
+          is (2.U){                               //mulhsu
+            
+          }
+          is (3.U){                               //mulhu
+            multiplierU64.io.multiplier    := input.bits.src1
+            multiplierU64.io.multiplicand  := input.bits.src2
+            int_result                    := multiplierU32.io.product(127,64)
+          }
+          is (4.U){                               //div
+            dividerS64.io.dividend         := input.bits.src1.asSInt
+            dividerS64.io.divisor          := input.bits.src2.asSInt
+            dividerS64.io.signed           := 1.UInt
+            int_result                     := dividerS64.io.quotient 
+          }
+          is (5.U){                               //divu
+            dividerU64.io.dividend         := input.bits.src1
+            dividerU64.io.divisor          := input.bits.src2
+            dividerU64.io.signed           := 0.UInt
+            int_result                     := dividerS64.io.quotient 
+          }
+          is (6.U){                               //rem
+            dividerS64.io.dividend         := input.bits.src1.asSInt
+            dividerS64.io.divisor          := input.bits.src2.asSInt
+            dividerS64.io.signed           := 1.UInt
+            int_result                     := dividerS64.io.remainder 
+          }
+          is (7.U){                               //remu
+            dividerU64.io.dividend         := input.bits.src1.asSInt
+            dividerU64.io.divisor          := input.bits.src2.asSInt
+            dividerU64.io.signed           := 0.UInt
+            int_result                     := dividerU64.io.remainder 
+          }
       }
     }
 
