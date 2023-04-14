@@ -1,6 +1,7 @@
+package pipeline.alu
+
 import chisel3._
 import chisel3.util._
-//import common._
 
 class booth_mult_substep_S(N:Int) extends Module{
     val io = IO(new Bundle{
