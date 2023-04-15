@@ -24,15 +24,13 @@ class mExten extends Module {
   when(status) {status := !input.valid}
   .otherwise {status := !output.ready}
 
-  val dividerS32     = Module(new booth_divider_S(32))
-  val dividerU32     = Module(new booth_divider_U(32))
-  val dividerS64     = Module(new booth_divider_S(64))
-  val dividerU64     = Module(new booth_divider_U(64))
   
-  val multiplierU32  = Module(new booth_multiplier_U(32))
-  val multiplierS32  = Module(new booth_multiplier_S(32))
-  val multiplierS64  = Module(new booth_multiplier_S(64))
-  val multiplierU64  = Module(new booth_multiplier_U(64))
+  
+  
+  
+  
+  
+  
 
   val result = Reg(UInt(64.W))
   val int_result = Reg(UInt(64.W))  //Intermittent result register
@@ -43,33 +41,38 @@ class mExten extends Module {
       is(true.B){
         switch(input.bits.instruction(14,12)){
           is (0.U){                             //mulw
+            val multiplierS32  = Module(new booth_multiplier_S(32))
             multiplierS32.io.multiplier    := input.bits.src1(31,0).asSInt
             multiplierS32.io.multiplicand  := input.bits.src2(31,0).asSInt
             int_result                    := Cat(Fill(32,multiplierS32.io.product(31)) ,multiplierS32.io.product(31,0))
           }
           is (4.U){                             //divw
-            dividerS32.io.dividend    := input.bits.src1(31,0).asSInt
-            dividerS32.io.divisor     := input.bits.src2(31,0).asSInt
-            dividerS32.io.signed      := 1.U
-            int_result                := Cat(Fill(32, dividerS32.io.quotient(31)) ,dividerS32.io.quotient(31,0))
+            val dividerS32_1     = Module(new booth_divider_S(32))
+            dividerS32_1.io.dividend    := input.bits.src1(31,0).asSInt
+            dividerS32_1.io.divisor     := input.bits.src2(31,0).asSInt
+            dividerS32_1.io.signed      := 1.U
+            int_result                := Cat(Fill(32, dividerS32_1.io.quotient(31)) ,dividerS32_1.io.quotient(31,0))
           }
           is (5.U){                              //divuw
-            dividerU32.io.dividend    := input.bits.src1(31,0)
-            dividerU32.io.divisor     := input.bits.src2(31,0)
-            dividerU32.io.signed      := 0.U
-            int_result                := Cat(Fill(32, dividerU32.io.quotient(31)) ,dividerU32.io.quotient(31,0))
+            val dividerU32_1     = Module(new booth_divider_U(32))
+            dividerU32_1.io.dividend    := input.bits.src1(31,0)
+            dividerU32_1.io.divisor     := input.bits.src2(31,0)
+            dividerU32_1.io.signed      := 0.U
+            int_result                := Cat(Fill(32, dividerU32_1.io.quotient(31)) ,dividerU32_1.io.quotient(31,0))
           }
           is (6.U){                             //remw
-            dividerS32.io.dividend    := input.bits.src1(31,0).asSInt
-            dividerS32.io.divisor     := input.bits.src2(31,0).asSInt
-            dividerS32.io.signed      := 1.U
-            int_result                := Cat(Fill(32, dividerS32.io.remainder(31)) ,dividerS32.io.remainder(31,0))
+            val dividerS32_2     = Module(new booth_divider_S(32))
+            dividerS32_2.io.dividend    := input.bits.src1(31,0).asSInt
+            dividerS32_2.io.divisor     := input.bits.src2(31,0).asSInt
+            dividerS32_2.io.signed      := 1.U
+            int_result                := Cat(Fill(32, dividerS32_2.io.remainder(31)) ,dividerS32_2.io.remainder(31,0))
           }
           is (7.U){                             //remuw
-            dividerU32.io.dividend    := input.bits.src1(31,0)
-            dividerU32.io.divisor     := input.bits.src2(31,0)
-            dividerU32.io.signed      := 0.U
-            int_result                := Cat(Fill(32, dividerU32.io.remainder(31)) ,dividerU32.io.remainder(31,0))
+            val dividerU32_2     = Module(new booth_divider_U(32))
+            dividerU32_2.io.dividend    := input.bits.src1(31,0)
+            dividerU32_2.io.divisor     := input.bits.src2(31,0)
+            dividerU32_2.io.signed      := 0.U
+            int_result                := Cat(Fill(32, dividerU32_2.io.remainder(31)) ,dividerU32_2.io.remainder(31,0))
           }
         }
       }
@@ -77,46 +80,53 @@ class mExten extends Module {
       is(false.B){
         switch(input.bits.instruction(14,12)){
           is (0.U){                             //mul
-            multiplierS64.io.multiplier    := input.bits.src1.asSInt
-            multiplierS64.io.multiplicand  := input.bits.src2.asSInt
-            int_result                    := multiplierS64.io.product(63,0).asUInt
+            val multiplierS64_1  = Module(new booth_multiplier_S(64))
+            multiplierS64_1.io.multiplier    := input.bits.src1.asSInt
+            multiplierS64_1.io.multiplicand  := input.bits.src2.asSInt
+            int_result                    := multiplierS64_1.io.product(63,0).asUInt
           }
           is (1.U){                              //mulh
-            multiplierS64.io.multiplier    := input.bits.src1.asSInt
-            multiplierS64.io.multiplicand  := input.bits.src2.asSInt
-            int_result                    := multiplierS64.io.product(127,64).asUInt
+            val multiplierS64_2  = Module(new booth_multiplier_S(64))
+            multiplierS64_2.io.multiplier    := input.bits.src1.asSInt
+            multiplierS64_2.io.multiplicand  := input.bits.src2.asSInt
+            int_result                    := multiplierS64_2.io.product(127,64).asUInt
           }
           is (2.U){                               //mulhsu
             
           }
           is (3.U){                               //mulhu
-            multiplierU64.io.multiplier    := input.bits.src1
-            multiplierU64.io.multiplicand  := input.bits.src2
-            int_result                    := multiplierU64.io.product(127,64)
+            val multiplierU64_1  = Module(new booth_multiplier_U(64))
+            multiplierU64_1.io.multiplier    := input.bits.src1
+            multiplierU64_1.io.multiplicand  := input.bits.src2
+            int_result                    := multiplierU64_1.io.product(127,64)
           }
           is (4.U){                               //div
-            dividerS64.io.dividend         := input.bits.src1.asSInt
-            dividerS64.io.divisor          := input.bits.src2.asSInt
-            dividerS64.io.signed           := 1.U
-            int_result                     := dividerS64.io.quotient.asUInt 
+            val dividerS64_1     = Module(new booth_divider_S(64))
+            dividerS64_1.io.dividend         := input.bits.src1.asSInt
+            dividerS64_1.io.divisor          := input.bits.src2.asSInt
+            dividerS64_1.io.signed           := 1.U
+            int_result                     := dividerS64_1.io.quotient.asUInt 
           }
           is (5.U){                               //divu
-            dividerU64.io.dividend         := input.bits.src1
-            dividerU64.io.divisor          := input.bits.src2
-            dividerU64.io.signed           := 0.U
-            int_result                     := dividerU64.io.quotient 
+            val dividerU64_1     = Module(new booth_divider_U(64))
+            dividerU64_1.io.dividend         := input.bits.src1
+            dividerU64_1.io.divisor          := input.bits.src2
+            dividerU64_1.io.signed           := 0.U
+            int_result                     := dividerU64_1.io.quotient 
           }
           is (6.U){                               //rem
-            dividerS64.io.dividend         := input.bits.src1.asSInt
-            dividerS64.io.divisor          := input.bits.src2.asSInt
-            dividerS64.io.signed           := 1.U
-            int_result                     := dividerS64.io.remainder.asUInt 
+            val dividerS64_2     = Module(new booth_divider_S(64))
+            dividerS64_2.io.dividend         := input.bits.src1.asSInt
+            dividerS64_2.io.divisor          := input.bits.src2.asSInt
+            dividerS64_2.io.signed           := 1.U
+            int_result                     := dividerS64_2.io.remainder.asUInt 
           }
           is (7.U){                               //remu
-            dividerU64.io.dividend         := input.bits.src1
-            dividerU64.io.divisor          := input.bits.src2
-            dividerU64.io.signed           := 0.U
-            int_result                     := dividerU64.io.remainder 
+            val dividerU64_2     = Module(new booth_divider_U(64))
+            dividerU64_2.io.dividend         := input.bits.src1
+            dividerU64_2.io.divisor          := input.bits.src2
+            dividerU64_2.io.signed           := 0.U
+            int_result                     := dividerU64_2.io.remainder 
           }
       }
     }
