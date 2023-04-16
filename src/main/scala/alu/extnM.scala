@@ -24,13 +24,7 @@ class mExten extends Module {
   when(status) {status := !input.valid}
   .otherwise {status := !output.ready}
 
-  
-  
-  
-  
-  
-  
-  
+
 
   val result = Reg(UInt(64.W))
   val int_result = Reg(UInt(64.W))  //Intermittent result register
