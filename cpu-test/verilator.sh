@@ -3,6 +3,7 @@ cd ..
 sbt "runMain pipeline.axi_cpu_wrapper"
 
 cd cpu-test
+mkdir waveform
 
 mv ../axi_cpu_wrapper.v .
 
