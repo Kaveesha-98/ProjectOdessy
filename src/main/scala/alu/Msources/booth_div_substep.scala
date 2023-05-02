@@ -3,6 +3,7 @@ package pipeline.alu
 import chisel3._
 import chisel3.util._
 
+
 class booth_div_substep(N:Int) extends Module{
     val io = IO(new Bundle{
         val acc = Input(UInt(N.W))         //A
@@ -12,13 +13,17 @@ class booth_div_substep(N:Int) extends Module{
         val next_Q = Output(UInt(N.W))
     })
 
-    val g1 = Module(new getOnesComplement(N))
-
     val int_ip = Wire(UInt(N.W))
 
-    g1.io.cin := 1.U
-    g1.io.i1 := io.divisor
-    int_ip := g1.io.onesComp
+    // //PRE
+    // val g1 = Module(new getOnesComplement(N))
+
+    // g1.io.cin := 1.U
+    // g1.io.i1 := io.divisor
+    // int_ip := g1.io.onesComp
+
+    //REV
+    int_ip := ~io.divisor
 
     //left shift before sending to the adder
     val shiftedA = Wire(UInt((N+1).W))
@@ -31,14 +36,18 @@ class booth_div_substep(N:Int) extends Module{
     shiftedA_LSB := io.Q(N-1)
     shiftedQ := io.Q << 1
 
-    val as1 = Module(new addsub(N))
-
     val sub_temp = Wire(UInt(N.W))
 
-    as1.io.cin := 1.U
-    as1.io.onesComp_ip := int_ip
-    as1.io.i0 := Cat(shiftedA(N-1,1),shiftedA_LSB)
-    sub_temp := as1.io.sum          //sub_temp will hold the value of A-M
+    // //PRE
+    // val as1 = Module(new addsub(N))
+ 
+    // as1.io.cin := 1.U
+    // as1.io.onesComp_ip := int_ip
+    // as1.io.i0 := Cat(shiftedA(N-1,1),shiftedA_LSB)
+    // sub_temp := as1.io.sum          //sub_temp will hold the value of A-M
+
+    //REV
+    sub_temp    := int_ip + 1.U + Cat(shiftedA(N-1,1),shiftedA_LSB).asUInt
 
     //logic loop
     when (sub_temp(N-1) === 1.U){

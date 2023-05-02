@@ -2,6 +2,7 @@ package pipeline.alu
 
 import chisel3._
 import chisel3.util._
+//import common._
 
 class booth_mult_substep_S(N:Int) extends Module{
     val io = IO(new Bundle{
@@ -14,25 +15,39 @@ class booth_mult_substep_S(N:Int) extends Module{
         val q0_next = Output(UInt(1.W))
     })
 
-    //initiating getOnesComplement module and making the connections
-    val g0 = Module(new(getOnesComplement))
+
 
     val int_ip = Wire(UInt(N.W))   //Output to be fed into the 64 bit adder subtractor
 
-    g0.io.cin := io.Q(0).asUInt
-    g0.io.i1 := io.multiplicand.asUInt 
-    int_ip := g0.io.onesComp
+    // //PRE
+    // //initiating getOnesComplement module and making the connections
+    // val g0 = Module(new(getOnesComplement))
 
+    // g0.io.cin := io.Q(0).asUInt
+    // g0.io.i1 := io.multiplicand.asUInt 
+    // int_ip := g0.io.onesComp
 
-    //initating the addsub_64 module and making the connections
-    val as0 = Module(new addsub(N))
+    //REV
+    when (io.Q(0).asUInt === 1.U){
+        int_ip  := ~io.multiplicand.asUInt
+    } .otherwise{
+        int_ip  := io.multiplicand.asUInt
+    }
+
 
     val addsub_temp = Wire(UInt(N.W))  //Output to be used in the logic loop
 
-    as0.io.cin := io.Q(0).asUInt
-    as0.io.onesComp_ip := int_ip
-    as0.io.i0 := io.acc.asUInt
-    addsub_temp := as0.io.sum
+    // //PRE
+    // //initating the addsub_64 module and making the connections
+    // val as0 = Module(new addsub(N))  
+
+    // as0.io.cin := io.Q(0).asUInt
+    // as0.io.onesComp_ip := int_ip
+    // as0.io.i0 := io.acc.asUInt
+    // addsub_temp := as0.io.sum
+
+    //REV
+    addsub_temp := int_ip + io.Q(0).asUInt + io.acc.asUInt
 
     //logic loop
 
