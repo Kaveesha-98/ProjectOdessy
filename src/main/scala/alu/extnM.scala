@@ -34,7 +34,7 @@ class mExten extends Module {
       val multiplierS32  = Module(new booth_multiplier_S(32))
       multiplierS32.io.multiplier    := input.bits.src1(31,0).asSInt
       multiplierS32.io.multiplicand  := input.bits.src2(31,0).asSInt
-      result                    := Cat(Fill(32,multiplierS32.io.product(31)) ,multiplierS32.io.product(31,0))
+      temp_result                    := Cat(Fill(32,multiplierS32.io.product(31)) ,multiplierS32.io.product(31,0))
     }
 
     .elsewhen (input.bits.instruction(14,12) === 4.U){              //divw
@@ -42,7 +42,7 @@ class mExten extends Module {
       dividerS32_1.io.dividend    := input.bits.src1(31,0).asSInt
       dividerS32_1.io.divisor     := input.bits.src2(31,0).asSInt
       dividerS32_1.io.signed      := 1.U
-      result                := Cat(Fill(32, dividerS32_1.io.quotient(31)) ,dividerS32_1.io.quotient)
+      temp_result                := Cat(Fill(32, dividerS32_1.io.quotient(31)) ,dividerS32_1.io.quotient)
     }
       
     .elsewhen (input.bits.instruction(14,12) === 5.U){              //divuw
@@ -50,7 +50,7 @@ class mExten extends Module {
       dividerU32_1.io.dividend    := input.bits.src1(31,0)
       dividerU32_1.io.divisor     := input.bits.src2(31,0)
       dividerU32_1.io.signed      := 0.U
-      result                := Cat(Fill(32, dividerU32_1.io.quotient(31)) ,dividerU32_1.io.quotient(31,0))
+      temp_result                := Cat(Fill(32, dividerU32_1.io.quotient(31)) ,dividerU32_1.io.quotient(31,0))
     }
 
     .elsewhen (input.bits.instruction(14,12) === 6.U){              //remw
@@ -58,7 +58,7 @@ class mExten extends Module {
       dividerS32_2.io.dividend    := input.bits.src1(31,0).asSInt
       dividerS32_2.io.divisor     := input.bits.src2(31,0).asSInt
       dividerS32_2.io.signed      := 1.U
-      result                := Cat(Fill(32, dividerS32_2.io.remainder(31)) ,dividerS32_2.io.remainder(31,0))
+      temp_result                := Cat(Fill(32, dividerS32_2.io.remainder(31)) ,dividerS32_2.io.remainder(31,0))
     }
 
     .elsewhen (input.bits.instruction(14,12) === 7.U){              //remw
@@ -66,11 +66,11 @@ class mExten extends Module {
       dividerU32_2.io.dividend    := input.bits.src1(31,0)
       dividerU32_2.io.divisor     := input.bits.src2(31,0)
       dividerU32_2.io.signed      := 0.U
-      result                := Cat(Fill(32, dividerU32_2.io.remainder(31)) ,dividerU32_2.io.remainder(31,0))
+      temp_result                := Cat(Fill(32, dividerU32_2.io.remainder(31)) ,dividerU32_2.io.remainder(31,0))
     }
 
     .otherwise{
-      result                := 0.U
+      temp_result                := 0.U
     }  
       
   }.otherwise{
@@ -79,26 +79,26 @@ class mExten extends Module {
       val multiplierS64_1  = Module(new booth_multiplier_S(64))
       multiplierS64_1.io.multiplier    := input.bits.src1(31,0).asSInt
       multiplierS64_1.io.multiplicand  := input.bits.src2(31,0).asSInt
-      result                    := multiplierS64_1.io.product(63,0).asUInt
+      temp_result                    := multiplierS64_1.io.product(63,0).asUInt
     }
 
     .elsewhen (input.bits.instruction(14,12) === 1.U){              //mulh
       val multiplierS64_2  = Module(new booth_multiplier_S(64))
       multiplierS64_2.io.multiplier    := input.bits.src1.asSInt
       multiplierS64_2.io.multiplicand  := input.bits.src2.asSInt
-      result                    := multiplierS64_2.io.product(127,64).asUInt
+      temp_result                    := multiplierS64_2.io.product(127,64).asUInt
     }
       
     .elsewhen (input.bits.instruction(14,12) === 2.U){              //mulhsu
 
-      result                := 0.U
+      temp_result                := 0.U
     }
 
     .elsewhen (input.bits.instruction(14,12) === 3.U){              //mulhu
       val multiplierU64_1  = Module(new booth_multiplier_U(64))
       multiplierU64_1.io.multiplier    := input.bits.src1
       multiplierU64_1.io.multiplicand  := input.bits.src2
-      result                    := multiplierU64_1.io.product(127,64)
+      temp_result                    := multiplierU64_1.io.product(127,64)
     }
 
     .elsewhen (input.bits.instruction(14,12) === 4.U){              //div
@@ -106,7 +106,7 @@ class mExten extends Module {
       dividerS64_1.io.dividend         := input.bits.src1.asSInt
       dividerS64_1.io.divisor          := input.bits.src2.asSInt
       dividerS64_1.io.signed           := 1.U
-      result                     := dividerS64_1.io.quotient.asUInt
+      temp_result                     := dividerS64_1.io.quotient.asUInt
     }
 
     .elsewhen (input.bits.instruction(14,12) === 5.U){              //divu
@@ -114,7 +114,7 @@ class mExten extends Module {
       dividerU64_1.io.dividend         := input.bits.src1
       dividerU64_1.io.divisor          := input.bits.src2
       dividerU64_1.io.signed           := 0.U
-      result                     := dividerU64_1.io.quotient
+      temp_result                     := dividerU64_1.io.quotient
     }
 
     .elsewhen (input.bits.instruction(14,12) === 6.U){              //rem
@@ -122,7 +122,7 @@ class mExten extends Module {
       dividerS64_2.io.dividend         := input.bits.src1.asSInt
       dividerS64_2.io.divisor          := input.bits.src2.asSInt
       dividerS64_2.io.signed           := 1.U
-      result                     := dividerS64_2.io.remainder.asUInt 
+      temp_result                     := dividerS64_2.io.remainder.asUInt 
     }
 
     .elsewhen (input.bits.instruction(14,12) === 7.U){              //remu
@@ -130,11 +130,11 @@ class mExten extends Module {
       dividerU64_2.io.dividend         := input.bits.src1
       dividerU64_2.io.divisor          := input.bits.src2
       dividerU64_2.io.signed           := 0.U
-      result                     := dividerU64_2.io.remainder 
+      temp_result                     := dividerU64_2.io.remainder 
     }
 
     .otherwise{
-      result                := 0.U
+      temp_result                := 0.U
     }
 
   }
@@ -167,7 +167,7 @@ class mExten extends Module {
   //   }
  
 
- 
+  result      := temp_result
   input.ready := status
   output.valid := !status
   output.bits := result
