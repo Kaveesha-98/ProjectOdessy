@@ -15,6 +15,14 @@ class booth_divider_U(N:Int) extends Module{
     val dividend_in = Wire(UInt(N.W))
     val divisor_in  = Wire(UInt(N.W))
 
+    //checking whether this is a division by zero
+    val divbyzeroFlag = Wire(Bool())
+    when (io.divisor === 0.S){
+        divbyzeroFlag := true.B
+    }.otherwise{
+        divbyzeroFlag := false.B
+    }
+
     //Quotient is negative if the signs are different
     val neg_quotient = Wire(UInt(1.W))
     neg_quotient := (io.dividend(N-1) ^ io.divisor(N-1)) & (io.signed === 1.U)
@@ -68,8 +76,14 @@ class booth_divider_U(N:Int) extends Module{
 
     //End : Division Algorithm
 
-    io.quotient := Mux((neg_quotient===1.U) , ~quotientTemp + 1.U , quotientTemp)
-    io.remainder:= Mux((io.signed === 1.U) & (io.dividend(N-1) === 1.U), ~remainderTemp + 1.U , remainderTemp)
+    when (divbyzeroFlag){
+        io.quotient := -1.S
+        io.remainder:= io.dividend
+    } .otherwise{
+        io.quotient := Mux((neg_quotient===1.U) , ~quotientTemp + 1.U , quotientTemp)
+        io.remainder:= Mux((io.signed === 1.U) & (io.dividend(N-1) === 1.U), ~remainderTemp + 1.U , remainderTemp)
+    }
+
 
 }
 
