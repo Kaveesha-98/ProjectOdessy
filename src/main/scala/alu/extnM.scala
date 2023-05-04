@@ -77,8 +77,8 @@ class mExten extends Module {
       
       when (input.bits.instruction(14,12) === 0.U){                   //mul
         val multiplierS64_1  = Module(new booth_multiplier_S(64))
-        multiplierS64_1.io.multiplier    := input.bits.src1(31,0).asSInt
-        multiplierS64_1.io.multiplicand  := input.bits.src2(31,0).asSInt
+        multiplierS64_1.io.multiplier    := input.bits.src1.asSInt
+        multiplierS64_1.io.multiplicand  := input.bits.src2.asSInt
         result                    := multiplierS64_1.io.product(63,0).asUInt
       }
 
