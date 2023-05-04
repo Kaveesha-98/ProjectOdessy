@@ -77,7 +77,7 @@ class booth_divider_U(N:Int) extends Module{
     //End : Division Algorithm
 
     when (divbyzeroFlag){
-        io.quotient := -1.S
+        io.quotient := "hffffffffffffffff".U
         io.remainder:= io.dividend
     } .otherwise{
         io.quotient := Mux((neg_quotient===1.U) , ~quotientTemp + 1.U , quotientTemp)
