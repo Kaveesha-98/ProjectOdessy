@@ -17,7 +17,7 @@ class booth_divider_U(N:Int) extends Module{
 
     //checking whether this is a division by zero
     val divbyzeroFlag = Wire(Bool())
-    when (io.divisor === 0.S){
+    when (io.divisor === 0.U){
         divbyzeroFlag := true.B
     }.otherwise{
         divbyzeroFlag := false.B
