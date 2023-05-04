@@ -23,6 +23,14 @@ class booth_divider_U(N:Int) extends Module{
         divbyzeroFlag := false.B
     }
 
+    //check whether the divisor is greater than the dividend
+    val divisorHiFlag = Wire(Bool())
+    when (io.divisor > io.dividend){
+        divisorHiFlag := true.B
+    }.otherwise{
+        divisorHiFlag := false.B
+    } 
+
     //Quotient is negative if the signs are different
     val neg_quotient = Wire(UInt(1.W))
     neg_quotient := (io.dividend(N-1) ^ io.divisor(N-1)) & (io.signed === 1.U)
@@ -79,7 +87,10 @@ class booth_divider_U(N:Int) extends Module{
     when (divbyzeroFlag){
         io.quotient := "hffffffffffffffff".U
         io.remainder:= io.dividend
-    } .otherwise{
+    } .elsewhen (divisorHiFlag){
+        io.quotient := 0.U
+        io.remainder:= io.dividend
+    }.otherwise{
         io.quotient := Mux((neg_quotient===1.U) , ~quotientTemp + 1.U , quotientTemp)
         io.remainder:= Mux((io.signed === 1.U) & (io.dividend(N-1) === 1.U), ~remainderTemp + 1.U , remainderTemp)
     }
