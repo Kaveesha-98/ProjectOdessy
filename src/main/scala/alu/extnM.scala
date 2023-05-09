@@ -95,20 +95,20 @@ class mExten extends Module {
       }
 
       //PRE
-      // .elsewhen (input.bits.instruction(14,12) === 3.U){              //mulhu
-      //   val multiplierU64_1  = Module(new booth_multiplier_U(64))
-      //   multiplierU64_1.io.multiplier    := input.bits.src1
-      //   multiplierU64_1.io.multiplicand  := input.bits.src2
-      //   result                    := multiplierU64_1.io.product(127,64)
-      // }
+      .elsewhen (input.bits.instruction(14,12) === 3.U){              //mulhu
+        val multiplierU64_1  = Module(new booth_multiplier_U(64))
+        multiplierU64_1.io.multiplier    := input.bits.src1
+        multiplierU64_1.io.multiplicand  := input.bits.src2
+        result                    := multiplierU64_1.io.product(127,64)
+      }
 
       //REV
-      .elsewhen (input.bits.instruction(14,12) === 3.U){              //mulhu
-        val multiplierS64_3  = Module(new booth_multiplier_S(64))
-        multiplierS64_3.io.multiplier    := input.bits.src1.asSInt
-        multiplierS64_3.io.multiplicand  := input.bits.src2.asSInt
-        result                    := multiplierS64_3.io.product(127,64).asUInt
-      }      
+      // .elsewhen (input.bits.instruction(14,12) === 3.U){              //mulhu
+      //   val multiplierS64_3  = Module(new booth_multiplier_S(64))
+      //   multiplierS64_3.io.multiplier    := input.bits.src1.asSInt
+      //   multiplierS64_3.io.multiplicand  := input.bits.src2.asSInt
+      //   result                    := multiplierS64_3.io.product(127,64).asUInt
+      // }      
 
       .elsewhen (input.bits.instruction(14,12) === 4.U){              //div
         val dividerS64_1     = Module(new booth_divider_S(64))
