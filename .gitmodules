@@ -1,3 +1,4 @@
 [submodule "emu-riscv"]
 	path = emu-riscv
 	url = https://github.com/Kaveesha-98/emu-riscv.git
+	branch = main
